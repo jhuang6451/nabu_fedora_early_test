@@ -12,7 +12,7 @@ ROOTFS_NAME="fedora-42-nabu-rootfs.tar.gz"
 mkdir -p "$ROOTFS_DIR"
 
 # 2. 初始化 DNF 环境并导入 COPR 仓库
-dnf install-root "$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False -y \
+dnf --install-root="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False -y \
     fedora-release \
     fedora-repos
 
@@ -22,7 +22,7 @@ dnf copr enable -y --root="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="
 
 # 3. 安装软件包
 # 参考您提供的列表，安装基础环境、图形界面、高通组件和专用内核等
-dnf install-root "$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False -y \
+dnf --install-root="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False -y --exclude dracut-config-rescue install \
     @core \
     @hardware-support \
     @standard \
@@ -36,14 +36,11 @@ dnf install-root "$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --
     systemd-resolved \
     grub2-efi-aa64 \
     grub2-efi-aa64-modules \
-    --exclude dracut-config-rescue \
-    # 高通平台组件
     qbootctl \
     tqftpserv \
     pd-mapper \
     rmtfs \
     qrtr \
-    # 小米平板5专用包
     kernel-sm8150 \
     xiaomi-nabu-firmware \
     xiaomi-nabu-audio

@@ -1,0 +1,70 @@
+name: '2. Build Fedora for Nabu'
+
+on:
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  contents: write # 为了创建 Release
+
+env:
+  # 确保这里的镜像地址和工作流一中的完全一致
+  CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+  ROOTFS_NAME: fedora-42-nabu-rootfs.tar.gz
+  ESP_NAME: esp.img
+
+jobs:
+  create_rootfs_and_esp:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+      options: --privileged
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create aarch64 rootfs
+        run: |
+          cp ./scripts/2_create_rootfs.sh ./2_create_rootfs.sh
+          chmod +x 2_create_rootfs.sh
+          ./2_create_rootfs.sh
+
+      - name: Create ESP image
+        run: |
+          cp ./scripts/3_create_esp.sh ./3_create_esp.sh
+          chmod +x 3_create_esp.sh
+          ./3_create_esp.sh
+
+      - name: Upload rootfs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-artifact
+          path: ./${{ env.ROOTFS_NAME }}
+
+      - name: Upload ESP image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-artifact
+          path: ./${{ env.ESP_NAME }}
+
+  # 步骤四：创建 Release
+  create_release:
+    runs-on: ubuntu-latest
+    needs: create_rootfs_and_esp
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Release and Upload Assets
+        run: |
+          cp ./scripts/4_create_release.sh ./4_create_release.sh
+          chmod +x 4_create_release.sh
+          ./4_create_release.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
