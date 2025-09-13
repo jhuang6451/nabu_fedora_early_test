@@ -135,13 +135,9 @@ sudo dnf -y \
     install \
     "${packages[@]}"
 
-# 步骤 2b: 进入 chroot 环境，重新安装软件包以触发安装脚本
-echo "  -> 步骤 2b: 在 chroot 环境中重新安装以执行 %post 脚本"
-# 注意: @gnome-desktop 组名在 reinstall 时可能无法直接使用，需要转换为其包含的包
-# 为了简化，我们假定 reinstall 核心包足以触发大部分重要脚本
-# 一个更稳健的方式是查询组内的包，但通常 reintall 关键包就够了
-# 这里我们直接用 reinstall "${packages[@]}" 尝试，dnf 应该能处理好
-sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf -y reinstall "${packages[@]}"
+# 步骤 2b: 进入 chroot 环境，重新安装所有已安装的包以触发安装脚本
+echo "  -> 步骤 2b: 在 chroot 环境中重新安装以执行 %post 脚本 (优化版)"
+sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'dnf -y reinstall $(rpm -qa)'
 
 
 # --- 在 chroot 环境中进行配置 ---
