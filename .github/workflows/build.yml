@@ -1,0 +1,74 @@
+name: Build and Release Nabu Fedora Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            sudo \
+            e2fsprogs \
+            dosfstools \
+            libguestfs-tools \
+            rpm-build \
+            rpm-sign \
+            cpio \
+            mtools \
+            systemd-container \
+            qemu-user-static \
+            qbootctl \
+            zip \
+            findutils \
+            util-linux \
+            dnf-utils
+
+      # - name: Prepare build script for CI
+      #   # 修正: 减小初始镜像大小以适应CI环境
+      #   run: |
+      #     sed -i 's/ROOTFS_INITIAL_SIZE="30G"/ROOTFS_INITIAL_SIZE="10G"/' build-nabu-images.sh
+      #     chmod +x build-nabu-images.sh
+
+      - name: Run build script
+        run: ./build-nabu-images.sh
+
+      - name: Package Images
+        run: |
+          zip nabu-fedora-images.zip *.img
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: build-${{ github.run_number }}
+          release_name: Release ${{ github.run_number }}
+          body: |
+            Automated build of nabu-fedora images.
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./nabu-fedora-images.zip
+          asset_name: nabu-fedora-images-${{ github.run_number }}.zip
+          asset_content_type: application/zip

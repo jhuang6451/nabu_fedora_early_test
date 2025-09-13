@@ -1,0 +1,13 @@
+*.img
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+# OS generated files
+.DS_Store
+.localized
+.project
+.settings
+.factorypath
