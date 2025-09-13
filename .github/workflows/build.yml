@@ -3,6 +3,10 @@ name: Build Fedora 42 for Mi Pad 5 (nabu)
 on:
   workflow_dispatch: # 允许手动触发
 
+permissions:
+  contents: write # 为了创建 Release
+  packages: write # 为了推送容器镜像到 ghcr.io
+
 env:
   CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
   ROOTFS_NAME: fedora-42-nabu-rootfs.tar.gz
