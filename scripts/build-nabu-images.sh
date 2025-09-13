@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ############################################################################################################################################
-## Name: build-nabu-images-v0.4.0.sh                                                                                                          ##
+## Name: build-nabu-images-v0.4.5.sh                                                                                                          ##
 ## Author: jhuang6451 <xplayerhtz123@outlook.com>                                                      ##
 ## Time: 2025-9-13                                                                                                                        ##
 ## Description:                                                                                                                           ##
@@ -29,7 +29,7 @@ REFIND_SOURCE_DIR="${REFIND_SOURCE_DIR:-./refind_src}"
 
 # --- 依赖检查 ---
 echo "INFO: 正在检查所需工具..."
-for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs rsync systemd-nspawn curl; do
+for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs rsync systemd-nspawn curl xargs; do
     if ! command -v $cmd &> /dev/null; then
         echo "错误: 命令 '$cmd' 未找到。请安装必要的软件包。"
         exit 1
@@ -135,9 +135,9 @@ sudo dnf -y \
     install \
     "${packages[@]}"
 
-# 步骤 2b: 进入 chroot 环境，重新安装所有已安装的包以触发安装脚本
-echo "  -> 步骤 2b: 在 chroot 环境中重新安装以执行 %post 脚本 (优化版)"
-sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'dnf -y reinstall $(rpm -qa)'
+# 步骤 2b: 进入 chroot 环境，分块重新安装所有包以触发安装脚本
+echo "  -> 步骤 2b: 在 chroot 环境中分块重新安装以执行 %post 脚本 (最终优化版)"
+sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'rpm -qa | xargs -n 100 dnf -y reinstall'
 
 
 # --- 在 chroot 环境中进行配置 ---
