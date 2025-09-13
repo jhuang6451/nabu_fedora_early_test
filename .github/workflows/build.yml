@@ -19,6 +19,21 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Free up disk space on the runner
+        run: |
+          echo "--- Initial disk space before cleaning ---"
+          df -h
+          echo "移除 .NET SDK，通常能释放 10-15GB"
+          sudo rm -rf /usr/share/dotnet
+          echo "移除 Android SDK，通常能释放大量空间"
+          sudo rm -rf /usr/local/lib/android
+          echo "移除 Haskell (ghc)，大约 5GB"
+          sudo rm -rf /opt/ghc
+          echo "移除 Swift，大约 3GB"
+          sudo rm -rf /usr/share/swift
+          echo "--- Disk space after cleaning ---"
+          df -h
+
       - name: Run Build in Fedora Container
         run: |
           docker run --rm --privileged \
