@@ -13,8 +13,8 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 mkdir -p "$ROOTFS_DIR"
 
 # 启用所需的 COPR 仓库
-dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi
-dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue
+dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
+dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
 
 # 3. 安装软件包
 dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
