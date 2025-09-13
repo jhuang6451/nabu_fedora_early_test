@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
-      options: --privileged
 
     steps:
       - name: Checkout repository
@@ -22,30 +19,21 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Install Dependencies
+      - name: Run Build in Fedora Container
         run: |
-          dnf update -y  
-          dnf install -y \
-            sudo \
-            e2fsprogs \
-            dosfstools \
-            libguestfs-tools \
-            rpm-build \
-            rpm-sign \
-            cpio \
-            mtools \
-            systemd-container \
-            qemu-user-static \
-            zip \
-            findutils \
-            util-linux \
-            rsync
-
-      - name: Run build script
-        run: |
-          cp ./scripts/build-nabu-images.sh ./build-nabu-images.sh
-          chmod +x ./build-nabu-images.sh
-          ./build-nabu-images.sh
+          docker run --rm --privileged \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            fedora:latest \
+            /bin/bash -c "
+              dnf update -y && \
+              dnf install -y \
+                sudo e2fsprogs dosfstools libguestfs-tools rpm-build \
+                rpm-sign cpio mtools systemd-container qemu-user-static \
+                zip findutils util-linux rsync && \
+              chmod +x ./scripts/build-nabu-images.sh && \
+              ./scripts/build-nabu-images.sh
+            "
 
       - name: Prepare Artifacts for Release
         id: prepare_artifacts
@@ -58,7 +46,7 @@ jobs:
           echo "Compressing ${ROOTFS_IMG} to ${ROOTFS_ARCHIVE}..."
           tar -czf ${ROOTFS_ARCHIVE} ${ROOTFS_IMG}
           
-          # 设置输出变量，供后续步骤使用
+          # Set output variables for subsequent steps
           echo "ROOTFS_ARCHIVE_NAME=${ROOTFS_ARCHIVE}" >> $GITHUB_OUTPUT
           echo "ESP_IMG_NAME=${ESP_IMG}" >> $GITHUB_OUTPUT
 
