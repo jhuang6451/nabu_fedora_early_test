@@ -102,8 +102,18 @@ mount -t proc proc "${ROOTFS_DIR}/proc"
 mount -t sysfs sys "${ROOTFS_DIR}/sys"
 mount --bind /dev "${ROOTFS_DIR}/dev"
 
-# 创建服务文件 (保持不变)
-# ...
+# 创建服务文件
+mkdir -p "${ROOTFS_DIR}/etc/systemd/system"
+cat <<EOF > "${ROOTFS_DIR}/etc/systemd/system/qbootctl.service"
+[Unit]
+Description=Qualcomm boot slot ctrl mark boot successful
+[Service]
+ExecStart=/usr/bin/qbootctl -m
+Type=oneshot
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
 
 # ==============================================================================
 # Chroot 并执行 (最终的关键修改)
@@ -121,8 +131,6 @@ chroot "$ROOTFS_DIR" /usr/bin/qemu-aarch64-static /bin/bash -c "
     systemctl enable rmtfs.service
     systemctl enable qbootctl.service
 "
-
-# trap 会自动触发 cleanup 函数来卸载
 
 # 5. 清理 rootfs 以减小体积
 dnf clean all --installroot="$ROOTFS_DIR"
