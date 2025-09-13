@@ -29,7 +29,7 @@ REFIND_SOURCE_DIR="${REFIND_SOURCE_DIR:-./refind_src}"
 
 # --- 依赖检查 ---
 echo "INFO: 正在检查所需工具..."
-for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs rsync systemd-nspawn; do
+for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs rsync systemd-nspawn curl; do
     if ! command -v $cmd &> /dev/null; then
         echo "错误: 命令 '$cmd' 未找到。请安装必要的软件包。"
         exit 1
@@ -57,7 +57,7 @@ echo "  -> 复制 QEMU aarch64 仿真器"
 sudo mkdir -p "$INSTALL_ROOT/usr/bin"
 sudo cp /usr/bin/qemu-aarch64-static "$INSTALL_ROOT/usr/bin/"
 
-# 2. 复制 DNS 配置以确保网络通畅
+# 2. 复制 DNS 配置
 echo "  -> 复制 DNS 配置"
 sudo mkdir -p "$INSTALL_ROOT/etc"
 sudo cp /etc/resolv.conf "$INSTALL_ROOT/etc/"
@@ -65,8 +65,6 @@ sudo cp /etc/resolv.conf "$INSTALL_ROOT/etc/"
 # 3. 在chroot环境中创建仓库配置文件
 echo "  -> 创建仓库配置文件"
 sudo mkdir -p "$INSTALL_ROOT/etc/yum.repos.d/"
-
-# --- FIX: Manually create Fedora repository files ---
 echo "  -> 创建 Fedora 官方仓库文件"
 sudo bash -c "cat > '$INSTALL_ROOT/etc/yum.repos.d/fedora.repo'" << EOF
 [fedora]
@@ -74,19 +72,22 @@ name=Fedora \$releasever - \$basearch
 baseurl=https://archives.fedoraproject.org/pub/fedora/linux/releases/\$releasever/Everything/\$basearch/os/
 enabled=1
 gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-\$basearch
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-primary
 skip_if_unavailable=False
 EOF
-
 sudo bash -c "cat > '$INSTALL_ROOT/etc/yum.repos.d/fedora-updates.repo'" << EOF
 [updates]
 name=Fedora \$releasever - \$basearch - Updates
 baseurl=https://archives.fedoraproject.org/pub/fedora/linux/updates/\$releasever/Everything/\$basearch/
 enabled=1
 gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-\$basearch
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-primary
 skip_if_unavailable=False
 EOF
+echo "  -> 下载 GPG 密钥到 installroot"
+sudo mkdir -p "$INSTALL_ROOT/etc/pki/rpm-gpg/"
+sudo curl -o "$INSTALL_ROOT/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_RELEASE}-primary" \
+     "https://src.fedoraproject.org/rpms/fedora-repos/raw/rawhide/f/RPM-GPG-KEY-fedora-${FEDORA_RELEASE}-primary"
 
 # 创建 COPR 仓库文件
 for repo in "${COPR_REPOS[@]}"; do
@@ -107,9 +108,10 @@ enabled_metadata=1
 EOF
 done
 
-# --- 在 chroot 环境中执行安装 ---
-echo "INFO: 步骤 2/4 - 进入 aarch64 chroot 环境并安装所有软件包..."
+# --- 执行两步安装 ---
+echo "INFO: 步骤 2/4 - 执行两步安装过程..."
 packages=(
+    "fedora-repos"
     "@gnome-desktop"
     "gnome-terminal" "nautilus" "gnome-software" "firefox"
     "xiaomi-nabu-firmware" "xiaomi-nabu-audio"
@@ -121,15 +123,26 @@ packages=(
     "kernel-sm8150"
 )
 
-# 使用 systemd-nspawn 在 chroot 中执行 dnf5 安装
-sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf \
-    -y \
+# 步骤 2a: 安装所有软件包，但不运行任何安装脚本
+echo "  -> 步骤 2a: 安装软件包文件 (tsflags=noscripts)"
+sudo dnf -y \
+    --installroot="$INSTALL_ROOT" \
     --releasever=$FEDORA_RELEASE \
     --forcearch=aarch64 \
     --exclude dracut-config-rescue \
     --setopt=install_weak_deps=False \
+    --setopt=tsflags=noscripts \
     install \
     "${packages[@]}"
+
+# 步骤 2b: 进入 chroot 环境，重新安装软件包以触发安装脚本
+echo "  -> 步骤 2b: 在 chroot 环境中重新安装以执行 %post 脚本"
+# 注意: @gnome-desktop 组名在 reinstall 时可能无法直接使用，需要转换为其包含的包
+# 为了简化，我们假定 reinstall 核心包足以触发大部分重要脚本
+# 一个更稳健的方式是查询组内的包，但通常 reintall 关键包就够了
+# 这里我们直接用 reinstall "${packages[@]}" 尝试，dnf 应该能处理好
+sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf -y reinstall "${packages[@]}"
+
 
 # --- 在 chroot 环境中进行配置 ---
 echo "INFO: 步骤 3/4 - 在 chroot 环境中配置系统..."
@@ -267,9 +280,9 @@ if [ -f "${REFIND_SOURCE_DIR}/refind_aa64.efi" ]; then
     [ -d "${REFIND_SOURCE_DIR}/icons" ] && cp -r "${REFIND_SOURCE_DIR}/icons" "$ESP_WORKDIR/EFI/BOOT/"
     [ -d "${REFIND_SOURCE_DIR}/drivers_aa64" ] && cp -r "${REFIND_SOURCE_DIR}/drivers_aa64" "$ESP_WORKDIR/EFI/BOOT/"
     cp "$GRUB_EFI_PATH" "$ESP_WORKDIR/EFI/fedora/grubaa64.efi"
-    
+
     echo "$GRUB_CFG_CONTENT" > "$ESP_WORKDIR/EFI/fedora/grub.cfg"
-    
+
     cat << EOF >> "$ESP_WORKDIR/EFI/BOOT/refind.conf"
 menuentry "Fedora Workstation" {
     loader /EFI/fedora/grubaa64.efi
