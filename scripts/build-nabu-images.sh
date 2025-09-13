@@ -119,6 +119,7 @@ packages=(
     "qbootctl" "tqftpserv" "pd-mapper" "rmtfs" "qrtr"
     "NetworkManager-tui" "git" "grubby" "vim"
     "kernel-sm8150"
+)
 
 # 使用 systemd-nspawn 在 chroot 中执行 dnf5 安装
 sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf \
