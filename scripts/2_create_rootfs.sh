@@ -3,7 +3,7 @@
 set -e
 
 # 定义变量
-ROOTFS_DIR="fedora-rootfs-aarch64"
+ROOTFS_DIR="$PWD/fedora-rootfs-aarch64"
 RELEASEVER="42"
 ARCH="aarch64"
 ROOTFS_NAME="fedora-42-nabu-rootfs.img" # 输出文件名
