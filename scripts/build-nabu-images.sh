@@ -123,13 +123,16 @@ sudo dnf --installroot=$INSTALL_ROOT \
          --releasever=$FEDORA_RELEASE \
          --forcearch=aarch64 \
          --exclude dracut-config-rescue \
+         --noscripts
          -y install \
          "${packages[@]}"
 
-echo "INFO: 步骤 4/4 - 正在移除官方内核并安装定制内核..."
-# 移除可能被默认安装的官方内核
+echo "INFO: 步骤 4/5 - 正在 chroot 环境中执行延迟的安装脚本..."
+# 进入chroot并运行所有被延迟的triggers和脚本，特别是ldconfig
+sudo systemd-nspawn -D "$INSTALL_ROOT" /bin/sh -c "rpm -a --triggers && ldconfig"
+
+echo "INFO: 步骤 5/5 - 正在移除官方内核并安装定制内核..."
 sudo dnf --installroot=$INSTALL_ROOT -y remove kernel kernel-core kernel-modules kernel-modules-core --noautoremove
-# 安装定制内核
 sudo dnf --installroot=$INSTALL_ROOT -y install kernel-sm8150
 
 # --- 启用关键服务 ---

@@ -36,11 +36,6 @@ jobs:
             util-linux \
             dnf-utils
 
-      # - name: Prepare build script for CI
-      #   # 修正: 减小初始镜像大小以适应CI环境
-      #   run: |
-      #     sed -i 's/ROOTFS_INITIAL_SIZE="30G"/ROOTFS_INITIAL_SIZE="10G"/' build-nabu-images.sh
-      #     chmod +x build-nabu-images.sh
 
       - name: Run build script
         run: |
