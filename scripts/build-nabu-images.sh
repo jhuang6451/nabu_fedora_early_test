@@ -95,10 +95,9 @@ enabled_metadata=1
 EOF
     done
 
-    # --- 执行两步安装 (不含桌面) ---
+    # --- 执行两步安装 ---
     packages=(
         "fedora-repos"
-        # "@gnome-desktop" # 桌面环境将在后续独立阶段安装
         "xiaomi-nabu-firmware" "xiaomi-nabu-audio"
         "grub2-efi-aa64" "grub2-efi-aa64-modules"
         "systemd-oomd-defaults" "systemd-resolved"
@@ -107,7 +106,7 @@ EOF
         "NetworkManager-tui" "git" "grubby" "vim" "sudo"
         "kernel-sm8150"
     )
-    sudo dnf -y --installroot="$INSTALL_ROOT" --releasever=$FEDORA_RELEASE --forcearch=aarch64 \
+    sudo dnf -v -y --installroot="$INSTALL_ROOT" --releasever=$FEDORA_RELEASE --forcearch=aarch64 \
         --exclude dracut-config-rescue --setopt=install_weak_deps=False --setopt=tsflags=noscripts \
         install "${packages[@]}"
     sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'rpm -qa | xargs -n 100 dnf -y reinstall'
