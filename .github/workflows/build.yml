@@ -20,6 +20,11 @@ jobs:
       - name: Install Dependencies
         run: |
           dnf update -y
+          
+          dnf install -y dnf-plugins-core
+          
+          dnf copr enable -y onesaladleaf/pocketblue
+          
           dnf install -y \
             sudo \
             e2fsprogs \
