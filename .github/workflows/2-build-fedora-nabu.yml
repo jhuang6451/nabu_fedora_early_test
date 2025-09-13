@@ -7,25 +7,33 @@ permissions:
   contents: write # 为了创建 Release
 
 env:
-  # 确保这里的镜像地址和工作流一中的完全一致
   CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
   ROOTFS_NAME: fedora-42-nabu-rootfs.img
   ESP_NAME: esp.img
 
 jobs:
+  # ==============================================================================
+  # 新增作业：在宿主机上配置 QEMU
+  # 这个作业不使用容器，它的唯一目的是准备好 runner 的内核环境。
+  # ==============================================================================
+  setup_runner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up QEMU for cross-architecture execution
+        uses: docker/setup-qemu-action@v3
+
+  # ==============================================================================
+  # 修改后的作业：在容器内进行构建
+  # 它依赖 setup_runner 作业，确保在宿主机配置完成后再开始。
+  # ==============================================================================
   create_rootfs_and_esp:
     runs-on: ubuntu-latest
+    needs: setup_runner # 关键：依赖 setup_runner 作业
     container:
       image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
       options: --privileged
     steps:
-      # ==============================================================================
-      # 在运行任何操作之前，配置 runner 的内核以支持多架构执行。
-      # 即使我们的工作步骤在容器内，chroot 依然需要宿主内核的 binfmt_misc 支持。
-      # ==============================================================================
-      - name: Set up QEMU for cross-architecture execution
-        uses: docker/setup-qemu-action@v3
-
+      # 这里不再需要 setup-qemu-action
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -53,7 +61,7 @@ jobs:
           name: esp-artifact
           path: ./${{ env.ESP_NAME }}
 
-  # 步骤四：创建 Release
+  # ... (create_release 作业保持不变, 它会正确地等待 create_rootfs_and_esp 完成) ...
   create_release:
     runs-on: ubuntu-latest
     needs: create_rootfs_and_esp
