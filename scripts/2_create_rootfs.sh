@@ -38,8 +38,8 @@ dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42
 dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" \
     --setopt=install_weak_deps=False \
     --exclude dracut-config-rescue \
-    --enablerepo="jhuang6451/nabu_fedora_packages_uefi" \
-    --enablerepo="onesaladleaf/pocketblue" \
+    --enablerepo="copr:copr.fedorainfracloud.org:jhuang6451:nabu_fedora_packages_uefi" \
+    --enablerepo="copr:copr.fedorainfracloud.org:onesaladleaf:pocketblue" \
     @core \
     @hardware-support \
     @standard \
