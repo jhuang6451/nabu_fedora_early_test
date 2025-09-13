@@ -12,11 +12,10 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 # 1. 创建 rootfs 目录
 mkdir -p "$ROOTFS_DIR"
 
-# 2. 启用所需的 COPR 仓库
-dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
-dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
-
-# 3. 引导基础仓库
+# ==============================================================================
+# 2. 引导基础仓库
+# 先安装 fedora-repos 包，为 rootfs 提供官方的仓库配置文件。
+# ==============================================================================
 echo "Bootstrapping Fedora repositories for $ARCH..."
 dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
     --repofrompath="fedora-repo,https://dl.fedoraproject.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
@@ -24,7 +23,18 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
     --nogpgcheck \
     fedora-repos
 
-# 4. 安装软件包
+# ==============================================================================
+# 3. 启用所需的 COPR 仓库
+# 在官方仓库配置就绪后，再启用 COPR 仓库。
+# ==============================================================================
+echo "Enabling COPR repositories..."
+dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
+dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
+
+# ==============================================================================
+# 4. 安装所有软件包
+# 现在，dnf 可以同时看到官方仓库和 COPR 仓库。
+# ==============================================================================
 dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
     @core \
     @hardware-support \
