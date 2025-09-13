@@ -19,6 +19,10 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ failure() }} # 仅在前面步骤失败时运行，或者可以直接运行来调试 
+
       - name: Run Build in Fedora Container
         run: |
           docker run --rm --privileged \

@@ -11,7 +11,7 @@
 ##      This script builds a Fedora Workstation system image tailored for Xiaomi Pad 5 (codename: nabu).                                  ##      ##
 ############################################################################################################################################
 
-set -e # 如果任何命令失败，则立即退出脚本
+set -ex # 如果任何命令失败，则立即退出脚本
 
 # --- 脚本配置 ---
 TIMESTAMP=$(date +%Y%m%d)
