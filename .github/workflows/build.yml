@@ -43,7 +43,10 @@ jobs:
       #     chmod +x build-nabu-images.sh
 
       - name: Run build script
-        run: ./build-nabu-images.sh
+        run: |
+          cp ./scripts/build-nabu-images.sh ./build-nabu-images.sh
+          chmod +x ./build-nabu-images.sh
+          ./build-nabu-images.sh
 
       - name: Package Images
         run: |
