@@ -100,8 +100,12 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-# Chroot 并执行
-chroot "$ROOTFS_DIR" /bin/bash -c "
+# ==============================================================================
+# Chroot 并执行 (关键修改)
+# 我们显式调用 qemu-aarch64-static 来执行 chroot 环境中的 bash。
+# 这绕过了在 CI 环境中可能不可靠的 binfmt_misc 自动触发机制。
+# ==============================================================================
+chroot "$ROOTFS_DIR" /usr/bin/qemu-aarch64-static /bin/bash -c "
     set -e
     echo 'Running dnf reinstall to execute package scripts...'
     # 重新安装所有软件包以运行它们的配置脚本
