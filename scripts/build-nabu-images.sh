@@ -58,10 +58,10 @@ echo "INFO: 正在挂载Rootfs镜像到临时目录: $INSTALL_ROOT"
 sudo mount -o loop $ROOTFS_IMG $INSTALL_ROOT
 
 # --- 配置仓库并安装基本软件包 ---
-echo "INFO: 步骤 1/3 - 正在为 aarch64 安装官方 Fedora 仓库 (禁用GPG检查)..."
+echo "INFO: 步骤 1/4 - 正在为 aarch64 安装官方 Fedora 仓库 (禁用GPG检查)..."
 sudo dnf --installroot=$INSTALL_ROOT --releasever=$FEDORA_RELEASE --forcearch=aarch64 -y --use-host-config --nogpgcheck install fedora-repos
 
-echo "INFO: 步骤 2/3 - 正在为 aarch64 手动创建所有 COPR 仓库文件..."
+echo "INFO: 步骤 2/4 - 正在为 aarch64 手动创建所有 COPR 仓库文件..."
 sudo mkdir -p "$INSTALL_ROOT/etc/yum.repos.d/"
 for repo in "${COPR_REPOS[@]}"; do
     COPR_OWNER=$(echo $repo | cut -d'/' -f1)
@@ -81,39 +81,50 @@ enabled_metadata=1
 EOF
 done
 
-echo "INFO: 步骤 3/3 - 正在安装基础系统和工具..."
+echo "INFO: 步骤 3/4 - 正在安装基础系统和工具..."
+packages=()
+# 基础GNOME桌面环境
+packages+=( "@gnome-desktop" )
+# 核心桌面应用
+packages+=(
+    "gnome-terminal"
+    "nautilus"
+    "gnome-software"
+    "firefox"
+)
+# 系统必备组件
+packages+=(
+    "xiaomi-nabu-firmware"
+    "xiaomi-nabu-audio"
+    "grub2-efi-aa64"
+    "grub2-efi-aa64-modules"
+    "systemd-oomd-defaults"
+    "systemd-resolved"
+    "glibc-langpack-en"
+    "fuse"
+)
+# 高通平台组件
+packages+=(
+    "qbootctl"
+    "tqftpserv"
+    "pd-mapper"
+    "rmtfs"
+    "qrtr"
+)
+# 实用工具
+packages+=(
+    "NetworkManager-tui"
+    "git"
+    "grubby"
+    "vim"
+)
+# 执行安装命令
 sudo dnf --installroot=$INSTALL_ROOT \
          --releasever=$FEDORA_RELEASE \
          --forcearch=aarch64 \
          --exclude dracut-config-rescue \
          -y install \
-    # 基础GNOME桌面环境
-    @gnome-desktop \
-    # 核心桌面应用
-    gnome-terminal \
-    nautilus \
-    gnome-software \
-    firefox \
-    # 系统必备组件
-    xiaomi-nabu-firmware \
-    xiaomi-nabu-audio \
-    grub2-efi-aa64 \
-    grub2-efi-aa64-modules \
-    systemd-oomd-defaults \
-    systemd-resolved \
-    glibc-langpack-en \
-    fuse \
-    # 高通平台组件
-    qbootctl \
-    tqftpserv \
-    pd-mapper \
-    rmtfs \
-    qrtr \
-    # 实用工具
-    NetworkManager-tui \
-    git \
-    grubby \
-    vim
+         "${packages[@]}"
 
 echo "INFO: 步骤 4/4 - 正在移除官方内核并安装定制内核..."
 # 移除可能被默认安装的官方内核

@@ -1,4 +1,5 @@
 *.img
+./scripts/ver/
 # Editors
 .vscode/
 .idea/
