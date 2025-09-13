@@ -31,6 +31,6 @@ gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-${FEDORA_VERSION}-primary' > /
 RUN dnf makecache && \
     dnf install -y dnf-utils dnf-plugins-core qemu-user-static coreutils tar gzip curl && \
     dnf install -y dosfstools mtools e2fsprogs libguestfs-tools rpm-build cpio && \
-    dnf install -y grub2-tools grub2-efi-aarch64.aarch64 grub2-efi-aarch64-cdboot.aarch64 && \
+    dnf install -y grub2-tools grub2-efi-aa64-modules && \
     dnf install -y systemd-container findutils util-linux rsync && \
     dnf clean all

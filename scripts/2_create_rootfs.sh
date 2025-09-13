@@ -35,6 +35,7 @@ dnf install-root "$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --
     btrfs-progs \
     systemd-resolved \
     grub2-efi-aa64 \
+    grub2-efi-aa64-modules \
     --exclude dracut-config-rescue \
     # 高通平台组件
     qbootctl \
