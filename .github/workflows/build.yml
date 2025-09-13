@@ -38,27 +38,27 @@ jobs:
           tags: ${{ env.CONTAINER_IMAGE }}
           platforms: linux/amd64
 
-  # # 步骤二：在容器中制作 aarch64 rootfs
-  # create_rootfs:
-  #   runs-on: ubuntu-latest
-  #   needs: build_container
-  #   container:
-  #     image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
-  #     options: --privileged
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
+  # 步骤二：在容器中制作 aarch64 rootfs
+  create_rootfs:
+    runs-on: ubuntu-latest
+    needs: build_container
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+      options: --privileged
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  #     - name: Create aarch64 rootfs
-  #       run: |
-  #         chmod +x ./scripts/2_create_rootfs.sh
-  #         ./scripts/2_create_rootfs.sh
+      - name: Create aarch64 rootfs
+        run: |
+          chmod +x ./scripts/2_create_rootfs.sh
+          ./scripts/2_create_rootfs.sh
       
-  #     - name: Upload rootfs artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: rootfs-artifact
-  #         path: ./${{ env.ROOTFS_NAME }}
+      - name: Upload rootfs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-artifact
+          path: ./${{ env.ROOTFS_NAME }}
 
   # # 步骤三：利用 rootfs 制作 ESP 镜像
   # create_esp_image:
