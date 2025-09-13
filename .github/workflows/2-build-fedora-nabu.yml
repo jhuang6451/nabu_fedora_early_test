@@ -19,6 +19,13 @@ jobs:
       image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
       options: --privileged
     steps:
+      # ==============================================================================
+      # 在运行任何操作之前，配置 runner 的内核以支持多架构执行。
+      # 即使我们的工作步骤在容器内，chroot 依然需要宿主内核的 binfmt_misc 支持。
+      # ==============================================================================
+      - name: Set up QEMU for cross-architecture execution
+        uses: docker/setup-qemu-action@v3
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
