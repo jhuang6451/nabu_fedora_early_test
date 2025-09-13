@@ -13,17 +13,15 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 mkdir -p "$ROOTFS_DIR"
 
 # 2. 初始化 DNF 环境并安装基础发布包
-# 注意：dnf5 需要先在指定的 root 中安装一个基础的发布包来初始化环境
-dnf install -y --root="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False fedora-release fedora-repos
+# dnf5 需要先在指定的 root 中安装一个基础的发布包来初始化环境
+dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False fedora-release fedora-repos
 
 # 启用所需的 COPR 仓库
-# dnf5 中，针对不同 root 的 copr 操作也使用 --root 参数
-dnf copr enable -y --root="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi
-dnf copr enable -y --root="$ROOTFS_DIR" onesaladleaf/pocketblue
+dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi
+dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue
 
 # 3. 安装软件包
-# 将 --install-root 替换为 --root
-dnf install -y --root="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
     @core \
     @hardware-support \
     @standard \
@@ -74,8 +72,8 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
 "
 
 # 5. 清理 rootfs 以减小体积
-# 清理 dnf 缓存，同样需要使用 --root
-dnf clean all --root="$ROOTFS_DIR"
+# 清除dnf缓存
+dnf clean all --installroot="$ROOTFS_DIR"
 # 移除 qemu-static
 rm "${ROOTFS_DIR}/usr/bin/qemu-aarch64-static"
 
