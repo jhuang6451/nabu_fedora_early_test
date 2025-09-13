@@ -24,8 +24,8 @@ mkdir -p "$ROOTFS_DIR"
 echo "Installing all packages in a single transaction..."
 dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" --releasever="$RELEASEVER" \
     --repofrompath="fedora-repo,https://dl.fedorainfracloud.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
-    --repofrompath="jhuang6451-copr,https://copr.fedorainfracloud.org/coprs/jhuang6451/nabu_fedora_packages_uefi/repo/fedora-$RELEASEVER/" \
-    --repofrompath="onesaladleaf-copr,https://copr.fedorainfracloud.org/coprs/onesaladleaf/pocketblue/repo/fedora-$RELEASEVER/" \
+    --repofrompath="jhuang6451-copr,https://copr.fedorainfracloud.org/coprs/jhuang6451/nabu_fedora_packages_uefi/" \
+    --repofrompath="onesaladleaf-copr,https://copr.fedorainfracloud.org/coprs/onesaladleaf/pocketblue/" \
     --nogpgcheck \
     --setopt=install_weak_deps=False --exclude dracut-config-rescue \
     fedora-repos \
