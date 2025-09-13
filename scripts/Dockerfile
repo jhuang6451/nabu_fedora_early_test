@@ -3,7 +3,7 @@ FROM fedora:42
 
 
 # 添加 GitHub CLI 仓库，更新 dnf 缓存并安装所有需要的工具
-RUN dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
+RUN dnf config-manager addrepo https://cli.github.com/packages/rpm/gh-cli.repo && \
     dnf makecache && \
     dnf install -y \
     coreutils \
