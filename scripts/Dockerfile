@@ -28,9 +28,28 @@ FROM fedora:42
 
 # 更新 dnf 缓存并安装核心工具
 # 将安装命令分成几步，并增加 -y 确认和错误排查步骤
+# 推荐的更新后命令
 RUN dnf makecache && \
-    dnf install -y dnf-utils dnf-plugins-core qemu-user-static coreutils tar gzip curl && \
-    dnf install -y dosfstools mtools e2fsprogs libguestfs-tools rpm-build cpio && \
-    dnf install -y grub2-tools grub2-efi-aa64-modules && \
-    dnf install -y systemd-container findutils util-linux rsync && \
-    dnf clean all
+    dnf install -y \
+    coreutils \
+    dnf-utils \
+    dnf-plugins-core \
+    qemu-user-static \
+    tar \
+    gzip \
+    curl \
+    findutils \
+    util-linux \
+    rsync \
+    gawk \
+    dosfstools \
+    mtools \
+    e2fsprogs \
+    grub2-tools \
+    grub2-efi-aa64-modules \
+    libguestfs-tools \
+    systemd-container \
+    rpm-build \
+    cpio \
+    github-cli \
+    && dnf clean all

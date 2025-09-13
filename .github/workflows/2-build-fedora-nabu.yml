@@ -9,7 +9,7 @@ permissions:
 env:
   # 确保这里的镜像地址和工作流一中的完全一致
   CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
-  ROOTFS_NAME: fedora-42-nabu-rootfs.tar.gz
+  ROOTFS_NAME: fedora-42-nabu-rootfs.img
   ESP_NAME: esp.img
 
 jobs:
