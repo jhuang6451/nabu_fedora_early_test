@@ -13,33 +13,22 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 mkdir -p "$ROOTFS_DIR"
 
 # ==============================================================================
-# 2. 引导基础仓库
-# 先安装 fedora-repos 包，为 rootfs 提供官方的仓库配置文件。
+# 2. 一次性安装所有软件包
+#
+# 我们在同一个 dnf 命令中完成所有操作，避免多次调用导致的状态问题。
+# - 使用 --repofrompath 临时添加 Fedora 官方仓库。
+# - 使用 --repofrompath 临时添加两个 COPR 仓库。
+#   COPR repo 的 URL 格式为: https://copr.fedorainfracloud.org/coprs/OWNER/PROJECT/repo/fedora-VERSION/
+# - 使用 --nogpgcheck，因为我们没有预先导入任何 GPG 密钥。
 # ==============================================================================
-echo "Bootstrapping Fedora repositories for $ARCH..."
-dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
-    --repofrompath="fedora-repo,https://dl.fedoraproject.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
-    --releasever="$RELEASEVER" \
+echo "Installing all packages in a single transaction..."
+dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" --releasever="$RELEASEVER" \
+    --repofrompath="fedora-repo,https://dl.fedorainfracloud.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
+    --repofrompath="jhuang6451-copr,https://copr.fedorainfracloud.org/coprs/jhuang6451/nabu_fedora_packages_uefi/repo/fedora-$RELEASEVER/" \
+    --repofrompath="onesaladleaf-copr,https://copr.fedorainfracloud.org/coprs/onesaladleaf/pocketblue/repo/fedora-$RELEASEVER/" \
     --nogpgcheck \
-    fedora-repos
-
-# ==============================================================================
-# 3. 启用所需的 COPR 仓库
-# 在官方仓库配置就绪后，再启用 COPR 仓库。
-# ==============================================================================
-echo "Enabling COPR repositories..."
-dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
-dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
-
-# ==============================================================================
-# 4. 安装所有软件包
-# 现在，dnf 可以同时看到官方仓库和 COPR 仓库。
-# ==============================================================================
-dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" \
-    --setopt=install_weak_deps=False \
-    --exclude dracut-config-rescue \
-    --enablerepo="copr:copr.fedorainfracloud.org:jhuang6451:nabu_fedora_packages_uefi" \
-    --enablerepo="copr:copr.fedorainfracloud.org:onesaladleaf:pocketblue" \
+    --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+    fedora-repos \
     @core \
     @hardware-support \
     @standard \
@@ -61,6 +50,57 @@ dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearc
     kernel-sm8150 \
     xiaomi-nabu-firmware \
     xiaomi-nabu-audio
+
+
+# # ==============================================================================
+# # 2. 引导基础仓库
+# # 先安装 fedora-repos 包，为 rootfs 提供官方的仓库配置文件。
+# # ==============================================================================
+# echo "Bootstrapping Fedora repositories for $ARCH..."
+# dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
+#     --repofrompath="fedora-repo,https://dl.fedoraproject.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
+#     --releasever="$RELEASEVER" \
+#     --nogpgcheck \
+#     fedora-repos
+
+# # ==============================================================================
+# # 3. 启用所需的 COPR 仓库
+# # 在官方仓库配置就绪后，再启用 COPR 仓库。
+# # ==============================================================================
+# echo "Enabling COPR repositories..."
+# dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
+# dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
+
+# # ==============================================================================
+# # 4. 安装所有软件包
+# # 现在，dnf 可以同时看到官方仓库和 COPR 仓库。
+# # ==============================================================================
+# dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" \
+#     --setopt=install_weak_deps=False \
+#     --exclude dracut-config-rescue \
+#     --enablerepo="copr:copr.fedorainfracloud.org:jhuang6451:nabu_fedora_packages_uefi" \
+#     --enablerepo="copr:copr.fedorainfracloud.org:onesaladleaf:pocketblue" \
+#     @core \
+#     @hardware-support \
+#     @standard \
+#     @base-graphical \
+#     NetworkManager-tui \
+#     git \
+#     grubby \
+#     vim \
+#     glibc-langpack-en \
+#     btrfs-progs \
+#     systemd-resolved \
+#     grub2-efi-aa64 \
+#     grub2-efi-aa64-modules \
+#     qbootctl \
+#     tqftpserv \
+#     pd-mapper \
+#     rmtfs \
+#     qrtr \
+#     kernel-sm8150 \
+#     xiaomi-nabu-firmware \
+#     xiaomi-nabu-audio
 
 # 5. Chroot 并配置系统
 # 复制 qemu-aarch64-static 到 rootfs 中以执行 aarch64 程序
