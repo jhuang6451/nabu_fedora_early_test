@@ -1,111 +1,110 @@
-name: Build and Release Nabu Fedora Image
+name: Build Fedora 42 for Mi Pad 5 (nabu)
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
+
+env:
+  CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+  ROOTFS_NAME: fedora-42-nabu-rootfs.tar.gz
+  ESP_NAME: esp.img
 
 jobs:
-  build:
+  # 步骤一：构建一个用于后续构建的 Fedora 42 容器镜像
+  build_container:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
-      - name: Free up disk space on the runner
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push builder container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./scripts/Dockerfile
+          push: true
+          tags: ${{ env.CONTAINER_IMAGE }}
+          platforms: linux/amd64
+
+  # 步骤二：在容器中制作 aarch64 rootfs
+  create_rootfs:
+    runs-on: ubuntu-latest
+    needs: build_container
+    container:
+      image: ${{ env.CONTAINER_IMAGE }}
+      options: --privileged
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create aarch64 rootfs
         run: |
-          echo "--- Initial disk space before cleaning ---"
-          df -h
-          echo "移除 .NET SDK，通常能释放 10-15GB"
-          sudo rm -rf /usr/share/dotnet
-          echo "移除 Android SDK，通常能释放大量空间"
-          sudo rm -rf /usr/local/lib/android
-          echo "移除 Haskell (ghc)，大约 5GB"
-          sudo rm -rf /opt/ghc
-          echo "移除 Swift，大约 3GB"
-          sudo rm -rf /usr/share/swift
-          echo "--- Disk space after cleaning ---"
-          df -h
+          chmod +x ./scripts/2_create_rootfs.sh
+          ./scripts/2_create_rootfs.sh
+      
+      - name: Upload rootfs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-artifact
+          path: ./${{ env.ROOTFS_NAME }}
 
-      - name: Run Build in Fedora Container
+  # 步骤三：利用 rootfs 制作 ESP 镜像
+  create_esp_image:
+    runs-on: ubuntu-latest
+    needs: create_rootfs
+    container:
+      image: ${{ env.CONTAINER_IMAGE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download rootfs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-artifact
+          path: .
+
+      - name: Create ESP image
         run: |
-          docker run --rm --privileged \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            fedora:latest \
-            /bin/bash -c "
-              echo '--- Initial disk space ---' && \
-              df -h && \
-              dnf update -y && \
-              dnf install -y \
-                sudo e2fsprogs dosfstools libguestfs-tools rpm-build \
-                rpm-sign cpio mtools systemd-container qemu-user-static \
-                zip findutils util-linux rsync && \
-              echo '--- Disk space after installing dependencies ---' && \
-              df -h && \
-              echo '--- Cleaning DNF cache ---' && \
-              dnf clean all && \
-              echo '--- Disk space after cleaning cache ---' && \
-              df -h && \
-              chmod +x ./scripts/build-nabu-images.sh && \
-              ./scripts/build-nabu-images.sh
-            "
+          chmod +x ./scripts/3_create_esp.sh
+          ./scripts/3_create_esp.sh
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ failure() }} # 仅在前面步骤失败时运行，或者可以直接运行来调试 
+      - name: Upload ESP image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-artifact
+          path: ./${{ env.ESP_NAME }}
 
-      - name: Prepare Artifacts for Release
-        id: prepare_artifacts
+  # 步骤四：创建 Release 并上传镜像文件
+  create_release:
+    runs-on: ubuntu-latest
+    needs: [create_rootfs, create_esp_image]
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Release and Upload Assets
         run: |
-          TIMESTAMP=$(date +%Y%m%d)
-          ROOTFS_IMG="fedora-nabu-rootfs-${TIMESTAMP}.img"
-          ESP_IMG="nabu-esp-${TIMESTAMP}.img"
-          ROOTFS_ARCHIVE="fedora-nabu-rootfs-${TIMESTAMP}.tar.gz"
-          
-          echo "Compressing ${ROOTFS_IMG} to ${ROOTFS_ARCHIVE}..."
-          tar -czf ${ROOTFS_ARCHIVE} ${ROOTFS_IMG}
-          
-          # Set output variables for subsequent steps
-          echo "ROOTFS_ARCHIVE_NAME=${ROOTFS_ARCHIVE}" >> $GITHUB_OUTPUT
-          echo "ESP_IMG_NAME=${ESP_IMG}" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+          chmod +x ./scripts/4_create_release.sh
+          ./scripts/4_create_release.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: build-${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
-          body: |
-            Automated build of nabu-fedora images.
-          draft: false
-          prerelease: false
-
-      - name: Upload Rootfs Asset (tar.gz)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
-          asset_name: ${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
-          asset_content_type: application/gzip
-
-      - name: Upload ESP Asset (.img)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
-          asset_name: ${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
-          asset_content_type: application/octet-stream
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
