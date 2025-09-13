@@ -12,28 +12,17 @@ env:
   ESP_NAME: esp.img
 
 jobs:
-  # ==============================================================================
-  # 新增作业：在宿主机上配置 QEMU
-  # 这个作业不使用容器，它的唯一目的是准备好 runner 的内核环境。
-  # ==============================================================================
-  setup_runner:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up QEMU for cross-architecture execution
-        uses: docker/setup-qemu-action@v3
+  # setup_runner 作业不再需要，已删除
 
-  # ==============================================================================
-  # 修改后的作业：在容器内进行构建
-  # 它依赖 setup_runner 作业，确保在宿主机配置完成后再开始。
-  # ==============================================================================
   create_rootfs_and_esp:
-    runs-on: ubuntu-latest
-    needs: setup_runner # 关键：依赖 setup_runner 作业
+    # 关键修改：在原生的 arm64 runner 上运行
+    runs-on: ubuntu-24.04-arm64
+    # 不再需要 needs: setup_runner
     container:
+      # 这个镜像是上一步构建的 arm64 镜像，完美匹配
       image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
       options: --privileged
     steps:
-      # 这里不再需要 setup-qemu-action
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -61,9 +50,9 @@ jobs:
           name: esp-artifact
           path: ./${{ env.ESP_NAME }}
 
-  # ... (create_release 作业保持不变, 它会正确地等待 create_rootfs_and_esp 完成) ...
   create_release:
-    runs-on: ubuntu-latest
+    # 关键修改：在原生的 arm64 runner 上运行
+    runs-on: ubuntu-24.04-arm64
     needs: create_rootfs_and_esp
     permissions:
       contents: write
