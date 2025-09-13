@@ -1,14 +1,20 @@
-name: Build and Release Nabu Fedora Image
+name: Staged Build and Release for Nabu Fedora
 
 on:
   push:
     branches:
-      - main
+      - alpha
   workflow_dispatch:
 
 jobs:
-  build:
+  # Job 1: 构建基础系统和ESP
+  # 这个Job现在会分别上传两个独立的工件：
+  # 1. base-rootfs-artifact: 仅包含基础rootfs，供下一个Job使用。
+  # 2. esp-artifact: 包含最终的ESP镜像，供最后一个Job直接使用。
+  build_base_and_esp:
     runs-on: ubuntu-latest
+    outputs:
+      timestamp: ${{ steps.set_timestamp.outputs.timestamp }}
 
     steps:
       - name: Checkout repository
@@ -19,93 +25,146 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Free up disk space on the runner
-        run: |
-          echo "--- Initial disk space before cleaning ---"
-          df -h
-          echo "移除 .NET SDK，通常能释放 10-15GB"
-          sudo rm -rf /usr/share/dotnet
-          echo "移除 Android SDK，通常能释放大量空间"
-          sudo rm -rf /usr/local/lib/android
-          echo "移除 Haskell (ghc)，大约 5GB"
-          sudo rm -rf /opt/ghc
-          echo "移除 Swift，大约 3GB"
-          sudo rm -rf /usr/share/swift
-          echo "--- Disk space after cleaning ---"
-          df -h
+      - name: Set and export timestamp
+        id: set_timestamp
+        run: echo "timestamp=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
       - name: Run Build in Fedora Container
         run: |
           docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            fedora:latest \
+            -e TIMESTAMP=${{ steps.set_timestamp.outputs.timestamp }} \
+            fedora:40 \
             /bin/bash -c "
-              echo '--- Initial disk space ---' && \
-              df -h && \
-              dnf update -y && \
-              dnf install -y \
-                sudo e2fsprogs dosfstools libguestfs-tools rpm-build \
-                rpm-sign cpio mtools systemd-container qemu-user-static \
-                zip findutils util-linux rsync && \
-              echo '--- Disk space after installing dependencies ---' && \
-              df -h && \
-              echo '--- Cleaning DNF cache ---' && \
+              dnf install -y sudo dnf-plugins-core e2fsprogs dosfstools libguestfs-tools \
+                             rpm-build cpio mtools systemd-container qemu-user-static \
+                             findutils util-linux rsync curl && \
               dnf clean all && \
-              echo '--- Disk space after cleaning cache ---' && \
-              df -h && \
               chmod +x ./scripts/build-nabu-images.sh && \
-              ./scripts/build-nabu-images.sh
+              echo '--- Building Base Rootfs ---' && \
+              BUILD_STAGE=build_base_rootfs ./scripts/build-nabu-images.sh && \
+              echo '--- Building ESP ---' && \
+              BUILD_STAGE=build_esp ./scripts/build-nabu-images.sh
             "
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ failure() }} # 仅在前面步骤失败时运行，或者可以直接运行来调试 
+      - name: Upload Base Rootfs for Next Job
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-rootfs-artifact-${{ steps.set_timestamp.outputs.timestamp }}
+          path: fedora-nabu-rootfs-${{ steps.set_timestamp.outputs.timestamp }}.img
 
-      - name: Prepare Artifacts for Release
-        id: prepare_artifacts
-        run: |
-          TIMESTAMP=$(date +%Y%m%d)
-          ROOTFS_IMG="fedora-nabu-rootfs-${TIMESTAMP}.img"
-          ESP_IMG="nabu-esp-${TIMESTAMP}.img"
-          ROOTFS_ARCHIVE="fedora-nabu-rootfs-${TIMESTAMP}.tar.gz"
+      - name: Upload ESP for Release Job
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-artifact-${{ steps.set_timestamp.outputs.timestamp }}
+          path: nabu-esp-${{ steps.set_timestamp.outputs.timestamp }}.img
+
+  # # Job 2: 在基础系统上安装桌面环境
+  # # 这个Job现在只下载它需要的基础rootfs，并且只上传它修改后生成的完整rootfs。
+  # build_full_rootfs:
+  #   runs-on: ubuntu-latest
+  #   needs: build_base_and_esp
+  #   outputs:
+  #     timestamp: ${{ needs.build_base_and_esp.outputs.timestamp }}
+
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Set up QEMU
+  #       uses: docker/setup-qemu-action@v3
+  #       with:
+  #         platforms: arm64
+      
+  #     - name: Download Base Rootfs Artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: base-rootfs-artifact-${{ needs.build_base_and_esp.outputs.timestamp }}
+
+  #     - name: Install Desktop Environment
+  #       run: |
+  #         docker run --rm --privileged \
+  #           -v ${{ github.workspace }}:/workspace \
+  #           -w /workspace \
+  #           -e TIMESTAMP=${{ needs.build_base_and_esp.outputs.timestamp }} \
+  #           fedora:40 \
+  #           /bin/bash -c "
+  #             dnf install -y sudo dnf-plugins-core libguestfs-tools systemd-container \
+  #                            qemu-user-static e2fsprogs && \
+  #             dnf clean all && \
+  #             chmod +x ./scripts/build-nabu-images.sh && \
+  #             BUILD_STAGE=install_desktop ./scripts/build-nabu-images.sh
+  #           "
+
+  #     - name: Upload Full Rootfs for Release Job
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: full-rootfs-artifact-${{ needs.build_base_and_esp.outputs.timestamp }}
+  #         path: fedora-nabu-rootfs-${{ needs.build_base_and_esp.outputs.timestamp }}.img
+
+  # # Job 3: 打包并发布
+  # # 这个Job现在依赖于前两个Job，并分别从它们那里下载最终的ESP和最终的Full Rootfs。
+  # package_and_release:
+  #   runs-on: ubuntu-latest
+  #   needs: [build_base_and_esp, build_full_rootfs] # 依赖两个前置Job
+
+  #   steps:
+  #     - name: Download Full Rootfs Artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: full-rootfs-artifact-${{ needs.build_full_rootfs.outputs.timestamp }}
+      
+  #     - name: Download ESP Artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: esp-artifact-${{ needs.build_full_rootfs.outputs.timestamp }} # 时间戳从 full_rootfs Job 获取，保持一致性
+
+  #     - name: Prepare Artifacts for Release
+  #       id: prepare_artifacts
+  #       run: |
+  #         TIMESTAMP=${{ needs.build_full_rootfs.outputs.timestamp }}
+  #         ROOTFS_IMG="fedora-nabu-rootfs-${TIMESTAMP}.img"
+  #         ESP_IMG="nabu-esp-${TIMESTAMP}.img"
+  #         ROOTFS_ARCHIVE="fedora-nabu-rootfs-${TIMESTAMP}.tar.gz"
           
-          echo "Compressing ${ROOTFS_IMG} to ${ROOTFS_ARCHIVE}..."
-          tar -czf ${ROOTFS_ARCHIVE} ${ROOTFS_IMG}
+  #         echo "Compressing ${ROOTFS_IMG} to ${ROOTFS_ARCHIVE}..."
+  #         tar -czf ${ROOTFS_ARCHIVE} ${ROOTFS_IMG}
           
-          # Set output variables for subsequent steps
-          echo "ROOTFS_ARCHIVE_NAME=${ROOTFS_ARCHIVE}" >> $GITHUB_OUTPUT
-          echo "ESP_IMG_NAME=${ESP_IMG}" >> $GITHUB_OUTPUT
+  #         echo "ROOTFS_ARCHIVE_NAME=${ROOTFS_ARCHIVE}" >> $GITHUB_OUTPUT
+  #         echo "ESP_IMG_NAME=${ESP_IMG}" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: build-${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
-          body: |
-            Automated build of nabu-fedora images.
-          draft: false
-          prerelease: false
+  #     - name: Create Release
+  #       id: create_release
+  #       uses: actions/create-release@v1
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       with:
+  #         tag_name: build-${{ github.run_number }}
+  #         release_name: Release ${{ github.run_number }}
+  #         body: |
+  #           Automated build of nabu-fedora images.
+  #           - Base image with command-line interface.
+  #           - Full image with GNOME Desktop.
+  #         draft: false
+  #         prerelease: false
 
-      - name: Upload Rootfs Asset (tar.gz)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
-          asset_name: ${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
-          asset_content_type: application/gzip
+  #     - name: Upload Rootfs Asset (tar.gz)
+  #       uses: actions/upload-release-asset@v1
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       with:
+  #         upload_url: ${{ steps.create_release.outputs.upload_url }}
+  #         asset_path: ./${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
+  #         asset_name: ${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
+  #         asset_content_type: application/gzip
 
-      - name: Upload ESP Asset (.img)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
-          asset_name: ${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
-          asset_content_type: application/octet-stream
+  #     - name: Upload ESP Asset (.img)
+  #       uses: actions/upload-release-asset@v1
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       with:
+  #         upload_url: ${{ steps.create_release.outputs.upload_url }}
+  #         asset_path: ./${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
+  #         asset_name: ${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
+  #         asset_content_type: application/octet-stream
