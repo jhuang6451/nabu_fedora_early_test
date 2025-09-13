@@ -65,8 +65,29 @@ sudo cp /etc/resolv.conf "$INSTALL_ROOT/etc/"
 # 3. 在chroot环境中创建仓库配置文件
 echo "  -> 创建仓库配置文件"
 sudo mkdir -p "$INSTALL_ROOT/etc/yum.repos.d/"
-# 安装官方仓库（这里我们直接写入repo文件，因为dnf install需要它们存在）
-sudo dnf -y --releasever=$FEDORA_RELEASE --forcearch=aarch64 install fedora-repos --installroot=$INSTALL_ROOT --nogpgcheck
+
+# --- FIX: Manually create Fedora repository files ---
+echo "  -> 创建 Fedora 官方仓库文件"
+sudo bash -c "cat > '$INSTALL_ROOT/etc/yum.repos.d/fedora.repo'" << EOF
+[fedora]
+name=Fedora \$releasever - \$basearch
+baseurl=https://archives.fedoraproject.org/pub/fedora/linux/releases/\$releasever/Everything/\$basearch/os/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-\$basearch
+skip_if_unavailable=False
+EOF
+
+sudo bash -c "cat > '$INSTALL_ROOT/etc/yum.repos.d/fedora-updates.repo'" << EOF
+[updates]
+name=Fedora \$releasever - \$basearch - Updates
+baseurl=https://archives.fedoraproject.org/pub/fedora/linux/updates/\$releasever/Everything/\$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-\$releasever-\$basearch
+skip_if_unavailable=False
+EOF
+
 # 创建 COPR 仓库文件
 for repo in "${COPR_REPOS[@]}"; do
     COPR_OWNER=$(echo $repo | cut -d'/' -f1)
