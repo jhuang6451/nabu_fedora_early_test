@@ -13,22 +13,48 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 mkdir -p "$ROOTFS_DIR"
 
 # ==============================================================================
-# 2. 一次性安装所有软件包
+# 2. 使用 Metalink 引导基础仓库
 #
-# 我们在同一个 dnf 命令中完成所有操作，避免多次调用导致的状态问题。
-# - 使用 --repofrompath 临时添加 Fedora 官方仓库。
-# - 使用 --repofrompath 临时添加两个 COPR 仓库。
-#   COPR repo 的 URL 格式为: https://copr.fedorainfracloud.org/coprs/OWNER/PROJECT/repo/fedora-VERSION/
-# - 使用 --nogpgcheck，因为我们没有预先导入任何 GPG 密钥。
+# 创建一个临时的 repo 配置文件，该文件使用 metalink 来动态查找最佳镜像。
+# 这是最稳健的方法，可以避免硬编码 baseurl 导致的下载失败。
 # ==============================================================================
-echo "Installing all packages in a single transaction..."
+echo "Bootstrapping Fedora repositories for $ARCH using metalink..."
+
+# 创建一个临时目录来存放 repo 文件
+TEMP_REPO_DIR=$(mktemp -d)
+# 设置一个 trap，确保脚本退出时（无论成功还是失败）都会删除临时目录
+trap 'rm -rf -- "$TEMP_REPO_DIR"' EXIT
+
+# 在临时目录中创建 repo 文件
+cat <<EOF > "${TEMP_REPO_DIR}/temp-fedora.repo"
+[temp-fedora]
+name=Temporary Fedora $RELEASEVER - $ARCH
+metalink=https://mirrors.fedoraproject.org/metalink?repo=fedora-$RELEASEVER&arch=$ARCH
+enabled=1
+gpgcheck=0
+skip_if_unavailable=False
+EOF
+
+# 使用 --setopt=reposdir 指向我们的临时目录，安装基础仓库配置文件
+# 这会强制 dnf 仅使用我们提供的这个 repo 文件，避免与宿主机仓库冲突
+dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
+    --setopt="reposdir=${TEMP_REPO_DIR}" \
+    --releasever="$RELEASEVER" \
+    fedora-repos
+
+
+# ==============================================================================
+# 3. 安装所有软件包
+#
+# 现在 rootfs 中已经有了官方的仓库配置，我们可以继续安装所有需要的软件包。
+# 我们只需要通过 --repofrompath 额外添加 COPR 仓库即可。
+# ==============================================================================
+echo "Installing all packages into rootfs..."
 dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" --releasever="$RELEASEVER" \
-    --repofrompath="fedora-repo,https://dl.fedorainfracloud.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
     --repofrompath="jhuang6451-copr,https://download.copr.fedorainfracloud.org/results/jhuang6451/nabu_fedora_packages_uefi/fedora-$RELEASEVER-$ARCH/" \
     --repofrompath="onesaladleaf-copr,https://download.copr.fedorainfracloud.org/results/onesaladleaf/pocketblue/fedora-$RELEASEVER-$ARCH/" \
     --nogpgcheck \
     --setopt=install_weak_deps=False --exclude dracut-config-rescue \
-    fedora-repos \
     @core \
     @hardware-support \
     @standard \
