@@ -26,11 +26,19 @@ jobs:
             -w /workspace \
             fedora:latest \
             /bin/bash -c "
+              echo '--- Initial disk space ---' && \
+              df -h && \
               dnf update -y && \
               dnf install -y \
                 sudo e2fsprogs dosfstools libguestfs-tools rpm-build \
                 rpm-sign cpio mtools systemd-container qemu-user-static \
                 zip findutils util-linux rsync && \
+              echo '--- Disk space after installing dependencies ---' && \
+              df -h && \
+              echo '--- Cleaning DNF cache ---' && \
+              dnf clean all && \
+              echo '--- Disk space after cleaning cache ---' && \
+              df -h && \
               chmod +x ./scripts/build-nabu-images.sh && \
               ./scripts/build-nabu-images.sh
             "

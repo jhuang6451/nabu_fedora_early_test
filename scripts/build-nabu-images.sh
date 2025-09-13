@@ -136,8 +136,17 @@ sudo dnf -y \
     "${packages[@]}"
 
 # 步骤 2b: 进入 chroot 环境，分块重新安装所有包以触发安装脚本
-echo "  -> 步骤 2b: 在 chroot 环境中分块重新安装以执行 %post 脚本 (最终优化版)"
-sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'rpm -qa | xargs -n 100 dnf -y reinstall'
+echo "  -> 步骤 2b: 在 chroot 环境中分块重新安装以执行 %post 脚本"
+# 获取所有已安装的包列表
+PACKAGES_TO_REINSTALL=$(sudo systemd-nspawn -D "$INSTALL_ROOT" rpm -qa)
+# 在 chroot 环境中循环重新安装，每次处理 50 个包
+echo "$PACKAGES_TO_REINSTALL" | xargs -n 50 | while read -r PKG_CHUNK; do
+    echo "  --> Reinstalling chunk: $PKG_CHUNK"
+    if ! sudo systemd-nspawn -D "$INSTALL_ROOT" dnf -y reinstall $PKG_CHUNK; then
+        echo "错误：重装以下软件包失败: $PKG_CHUNK"
+        exit 1
+    fi
+done
 
 
 # --- 在 chroot 环境中进行配置 ---
