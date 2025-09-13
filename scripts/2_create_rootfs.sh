@@ -35,7 +35,11 @@ dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42
 # 4. 安装所有软件包
 # 现在，dnf 可以同时看到官方仓库和 COPR 仓库。
 # ==============================================================================
-dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" \
+    --setopt=install_weak_deps=False \
+    --exclude dracut-config-rescue \
+    --enablerepo="copr:copr.fedorainfracloud.org:jhuang6451:nabu_fedora_packages_uefi" \
+    --enablerepo="copr:copr.fedorainfracloud.org:onesaladleaf:pocketblue" \
     @core \
     @hardware-support \
     @standard \
