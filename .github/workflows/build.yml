@@ -35,7 +35,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             -e TIMESTAMP=${{ steps.set_timestamp.outputs.timestamp }} \
-            fedora:40 \
+            fedora:42 \
             /bin/bash -c "
               dnf install -y sudo dnf-plugins-core e2fsprogs dosfstools libguestfs-tools \
                              rpm-build cpio mtools systemd-container qemu-user-static \

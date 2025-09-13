@@ -27,6 +27,8 @@ ESP_IMG="nabu-esp-${TIMESTAMP}.img"
 ESP_SIZE="512M"
 REFIND_SOURCE_DIR="${REFIND_SOURCE_DIR:-./refind_src}"
 
+# --- 函数定义 ---
+
 # --- 依赖检查 ---
 check_deps() {
     echo "INFO: 正在检查所需工具..."
@@ -41,31 +43,7 @@ check_deps() {
     echo "INFO: 所有必需工具均已就绪。"
 }
 
-
-# --- 主逻辑：根据 BUILD_STAGE 执行不同函数 ---
-case "$BUILD_STAGE" in
-    build_base_rootfs)
-        check_deps sudo dnf truncate mkfs.ext4 guestmount guestunmount rsync systemd-nspawn curl xargs tune2fs e2fsck resize2fs
-        build_base_rootfs
-        ;;
-    install_desktop)
-        check_deps sudo guestmount guestunmount systemd-nspawn e2fsck resize2fs
-        install_desktop
-        ;;
-    build_esp)
-        check_deps dnf guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs
-        build_esp
-        ;;
-    *)
-        echo "错误: 未知的 BUILD_STAGE: '$BUILD_STAGE'"
-        echo "有效选项为: build_base_rootfs, install_desktop, build_esp"
-        exit 1
-        ;;
-esac
-
-
-# --- 阶段函数定义 ---
-
+# --- 阶段函数: 构建基础 Rootfs ---
 build_base_rootfs() {
     echo "##############################################"
     echo "### 阶段: 构建基础 Rootfs"
@@ -117,9 +95,10 @@ enabled_metadata=1
 EOF
     done
 
-    # --- 执行两步安装 ---
+    # --- 执行两步安装 (不含桌面) ---
     packages=(
         "fedora-repos"
+        # "@gnome-desktop" # 桌面环境将在后续独立阶段安装
         "xiaomi-nabu-firmware" "xiaomi-nabu-audio"
         "grub2-efi-aa64" "grub2-efi-aa64-modules"
         "systemd-oomd-defaults" "systemd-resolved"
@@ -134,7 +113,7 @@ EOF
     sudo systemd-nspawn -D "$INSTALL_ROOT" bash -c 'rpm -qa | xargs -n 100 dnf -y reinstall'
 
     # --- chroot 环境配置 ---
-    # ... (注入服务、启用服务、设置密码等)
+    # ... (注入服务、启用服务、设置密码等，这部分代码不变)
     sudo bash -c "cat > '$INSTALL_ROOT/etc/systemd/system/qbootctl-mark-boot-successful.service'" << EOF
 [Unit]
 Description=Qualcomm boot slot ctrl mark boot successful
@@ -190,6 +169,7 @@ EOF
     echo "INFO: 基础 Rootfs 构建完成: ${ROOTFS_IMG}"
 }
 
+# --- 阶段函数: 安装桌面环境 ---
 install_desktop() {
     echo "##############################################"
     echo "### 阶段: 安装桌面环境到 ${ROOTFS_IMG}"
@@ -229,6 +209,7 @@ install_desktop() {
     echo "INFO: 桌面环境安装完成。"
 }
 
+# --- 阶段函数: 构建ESP ---
 build_esp() {
     echo "##############################################"
     echo "### 阶段: 构建 ESP ($ESP_IMG)"
@@ -298,3 +279,27 @@ EOF
     trap - EXIT
     echo "INFO: ESP 构建完成: ${ESP_IMG}"
 }
+
+# --- 主逻辑：根据 BUILD_STAGE 执行不同函数 ---
+#
+# 将此部分移动到所有函数定义之后，以确保函数在被调用前已被解析。
+#
+case "$BUILD_STAGE" in
+    build_base_rootfs)
+        check_deps sudo dnf truncate mkfs.ext4 guestmount guestunmount rsync systemd-nspawn curl xargs tune2fs e2fsck resize2fs
+        build_base_rootfs
+        ;;
+    install_desktop)
+        check_deps sudo guestmount guestunmount systemd-nspawn e2fsck resize2fs
+        install_desktop
+        ;;
+    build_esp)
+        check_deps dnf guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs
+        build_esp
+        ;;
+    *)
+        echo "错误: 未知的 BUILD_STAGE: '$BUILD_STAGE'"
+        echo "有效选项为: build_base_rootfs, install_desktop, build_esp"
+        exit 1
+        ;;
+esac
