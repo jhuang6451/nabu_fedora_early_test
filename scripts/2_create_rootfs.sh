@@ -13,6 +13,16 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 mkdir -p "$ROOTFS_DIR"
 
 # ==============================================================================
+# 1.5. (关键改动) 提前复制 QEMU 静态二进制文件
+#
+# 为了让 dnf/rpm 在安装过程中能够成功运行 aarch64 的 scriptlet，
+# 我们必须在调用 dnf install 之前就把模拟器放到目标 rootfs 中。
+# ==============================================================================
+echo "Copying QEMU static binary for cross-architecture execution..."
+cp /usr/bin/qemu-aarch64-static "${ROOTFS_DIR}/usr/bin/"
+
+
+# ==============================================================================
 # 2. 使用 Metalink 引导基础仓库
 #
 # 创建一个临时的 repo 配置文件，该文件使用 metalink 来动态查找最佳镜像。
@@ -128,9 +138,9 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" --releasever="$RE
 #     xiaomi-nabu-firmware \
 #     xiaomi-nabu-audio
 
-# 5. Chroot 并配置系统
-# 复制 qemu-aarch64-static 到 rootfs 中以执行 aarch64 程序
-cp /usr/bin/qemu-aarch64-static "${ROOTFS_DIR}/usr/bin/"
+# # 5. Chroot 并配置系统
+# # 复制 qemu-aarch64-static 到 rootfs 中以执行 aarch64 程序
+# cp /usr/bin/qemu-aarch64-static "${ROOTFS_DIR}/usr/bin/"
 
 # 创建 qbootctl 服务文件
 mkdir -p "${ROOTFS_DIR}/etc/systemd/system"
