@@ -12,11 +12,19 @@ IMG_SIZE="8G" # 定义初始镜像大小，应确保足够容纳所有文件
 # 1. 创建 rootfs 目录
 mkdir -p "$ROOTFS_DIR"
 
-# 启用所需的 COPR 仓库
+# 2. 启用所需的 COPR 仓库
 dnf copr enable -y --installroot="$ROOTFS_DIR" jhuang6451/nabu_fedora_packages_uefi fedora-42-aarch64
 dnf copr enable -y --installroot="$ROOTFS_DIR" onesaladleaf/pocketblue fedora-42-aarch64
 
-# 3. 安装软件包
+# 3. 引导基础仓库
+echo "Bootstrapping Fedora repositories for $ARCH..."
+dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
+    --repofrompath="fedora-repo,https://dl.fedoraproject.org/pub/fedora/linux/releases/$RELEASEVER/Everything/$ARCH/os/" \
+    --releasever="$RELEASEVER" \
+    --nogpgcheck \
+    fedora-repos
+
+# 4. 安装软件包
 dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearch="$ARCH" --setopt=install_weak_deps=False --exclude dracut-config-rescue \
     @core \
     @hardware-support \
@@ -40,7 +48,7 @@ dnf install -y --installroot="$ROOTFS_DIR" --releasever="$RELEASEVER" --forcearc
     xiaomi-nabu-firmware \
     xiaomi-nabu-audio
 
-# 4. Chroot 并配置系统
+# 5. Chroot 并配置系统
 # 复制 qemu-aarch64-static 到 rootfs 中以执行 aarch64 程序
 cp /usr/bin/qemu-aarch64-static "${ROOTFS_DIR}/usr/bin/"
 
@@ -67,13 +75,13 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
     systemctl enable qbootctl.service
 "
 
-# 5. 清理 rootfs 以减小体积
+# 6. 清理 rootfs 以减小体积
 # 清除dnf缓存
 dnf clean all --installroot="$ROOTFS_DIR"
 # 移除 qemu-static
 rm "${ROOTFS_DIR}/usr/bin/qemu-aarch64-static"
 
-# 6. 将 rootfs 打包为 img 文件
+# 7. 将 rootfs 打包为 img 文件
 echo "Creating rootfs image..."
 # 创建一个指定大小的空镜像文件
 fallocate -l "$IMG_SIZE" "$ROOTFS_NAME"
@@ -98,7 +106,7 @@ rmdir "$MOUNT_DIR"
 
 echo "Rootfs image created as $ROOTFS_NAME"
 
-# 7. 最小化并压缩 img 文件
+# 8. 最小化并压缩 img 文件
 echo "Minimizing the image file..."
 
 # 强制检查文件系统以确保其干净
