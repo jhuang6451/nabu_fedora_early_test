@@ -43,7 +43,7 @@ echo "##############################################"
 echo "### 阶段 1: 开始构建 Rootfs ($ROOTFS_IMG)"
 echo "##############################################"
 
-# 创建临时的rootfs目录
+# 新逻辑：先创建一个目录作为临时的rootfs
 INSTALL_ROOT=$(mktemp -d)
 trap 'sudo rm -rf "$INSTALL_ROOT"' EXIT
 

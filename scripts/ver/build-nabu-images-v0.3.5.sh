@@ -1,14 +1,18 @@
 #!/bin/bash
 
 ############################################################################################################################################
-## Name: build-nabu-images-v0.4.0.sh                                                                                                          ##
-## Author: jhuang6451 <xplayerhtz123@outlook.com>                                                      ##
-## Time: 2025-9-13                                                                                                                        ##
+## Name: build-nabu-images-v3.3.sh                                                                                                          ##
+## Author: jhuang6451 <xplayerhtz123@outlook.com>                                                                                         ##
+## Time: 2025-9-12                                                                                                                        ##
 ## Description:                                                                                                                           ##
 ##  ZH-CN:                                                                                                                                ##
-##      脚本用于构建适用于小米平板5(设备代号: nabu)的Fedora Workstation系统安装镜像。                                                      ##                           ##
+##      脚本用于构建适用于小米平板5(设备代号: nabu)的Fedora Workstation系统安装镜像                                                       ##
+##      注意⚠️：如果需要调整或更新kernel版本，请修改脚本中对应的kernel包名称                                                              ##
+##      nabu专用包构建于：https://copr.fedorainfracloud.org/coprs/jhuang6451/nabu_fedora_packages_uefi/                                   ##
 ##  EN:                                                                                                                                   ##
-##      This script builds a Fedora Workstation system image tailored for Xiaomi Pad 5 (codename: nabu).                                  ##      ##
+##      This script builds a Fedora Workstation system image tailored for Xiaomi Pad 5 (codename: nabu).                                  ##
+##      Note⚠️: If you need to adjust or update the kernel version, please modify the corresponding kernel package name in the script.    ##
+##      The nabu-specific packages are built at: https://copr.fedorainfracloud.org/coprs/jhuang6451/nabu_fedora_packages_uefi/            ##
 ############################################################################################################################################
 
 set -e # 如果任何命令失败，则立即退出脚本
@@ -29,7 +33,7 @@ REFIND_SOURCE_DIR="${REFIND_SOURCE_DIR:-./refind_src}"
 
 # --- 依赖检查 ---
 echo "INFO: 正在检查所需工具..."
-for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs rsync systemd-nspawn; do
+for cmd in sudo dnf truncate mkfs.ext4 mkfs.vfat guestmount guestunmount rpm2cpio cpio mcopy blkid tune2fs e2fsck resize2fs; do
     if ! command -v $cmd &> /dev/null; then
         echo "错误: 命令 '$cmd' 未找到。请安装必要的软件包。"
         exit 1
@@ -43,31 +47,22 @@ echo "##############################################"
 echo "### 阶段 1: 开始构建 Rootfs ($ROOTFS_IMG)"
 echo "##############################################"
 
-# 创建临时的rootfs目录
+echo "INFO: 正在创建 ${ROOTFS_INITIAL_SIZE} 大小的镜像文件: ${ROOTFS_IMG}"
+truncate -s $ROOTFS_INITIAL_SIZE $ROOTFS_IMG
+mkfs.ext4 -L "fedora_root" $ROOTFS_IMG
+
 INSTALL_ROOT=$(mktemp -d)
-trap 'sudo rm -rf "$INSTALL_ROOT"' EXIT
+trap 'sudo umount "$INSTALL_ROOT" 2>/dev/null; rmdir "$INSTALL_ROOT"' EXIT
 
-echo "INFO: 创建临时Rootfs目录: $INSTALL_ROOT"
+echo "INFO: 正在挂载Rootfs镜像到临时目录: $INSTALL_ROOT"
+sudo mount -o loop $ROOTFS_IMG $INSTALL_ROOT
 
-# --- 准备 chroot 环境 ---
-echo "INFO: 步骤 1/4 - 准备 chroot 环境..."
+# --- 配置仓库并安装基本软件包 ---
+echo "INFO: 步骤 1/4 - 正在为 aarch64 安装官方 Fedora 仓库 (禁用GPG检查)..."
+sudo dnf --installroot=$INSTALL_ROOT --releasever=$FEDORA_RELEASE --forcearch=aarch64 -y --use-host-config --nogpgcheck install fedora-repos
 
-# 1. 复制 QEMU 仿真器
-echo "  -> 复制 QEMU aarch64 仿真器"
-sudo mkdir -p "$INSTALL_ROOT/usr/bin"
-sudo cp /usr/bin/qemu-aarch64-static "$INSTALL_ROOT/usr/bin/"
-
-# 2. 复制 DNS 配置以确保网络通畅
-echo "  -> 复制 DNS 配置"
-sudo mkdir -p "$INSTALL_ROOT/etc"
-sudo cp /etc/resolv.conf "$INSTALL_ROOT/etc/"
-
-# 3. 在chroot环境中创建仓库配置文件
-echo "  -> 创建仓库配置文件"
+echo "INFO: 步骤 2/4 - 正在为 aarch64 手动创建所有 COPR 仓库文件..."
 sudo mkdir -p "$INSTALL_ROOT/etc/yum.repos.d/"
-# 安装官方仓库（这里我们直接写入repo文件，因为dnf install需要它们存在）
-sudo dnf -y --releasever=$FEDORA_RELEASE --forcearch=aarch64 install fedora-repos --installroot=$INSTALL_ROOT --nogpgcheck
-# 创建 COPR 仓库文件
 for repo in "${COPR_REPOS[@]}"; do
     COPR_OWNER=$(echo $repo | cut -d'/' -f1)
     COPR_PROJECT=$(echo $repo | cut -d'/' -f2)
@@ -86,109 +81,143 @@ enabled_metadata=1
 EOF
 done
 
-# --- 在 chroot 环境中执行安装 ---
-echo "INFO: 步骤 2/4 - 进入 aarch64 chroot 环境并安装所有软件包..."
-packages=(
-    "@gnome-desktop"
-    "gnome-terminal" "nautilus" "gnome-software" "firefox"
-    "xiaomi-nabu-firmware" "xiaomi-nabu-audio"
-    "grub2-efi-aa64" "grub2-efi-aa64-modules"
-    "systemd-oomd-defaults" "systemd-resolved"
-    "glibc-langpack-en" "fuse"
-    "qbootctl" "tqftpserv" "pd-mapper" "rmtfs" "qrtr"
-    "NetworkManager-tui" "git" "grubby" "vim"
-    "kernel-sm8150"
+echo "INFO: 步骤 3/4 - 正在安装基础系统和工具..."
+packages=()
+# 基础GNOME桌面环境
+packages+=( "@gnome-desktop" )
+# 核心桌面应用
+packages+=(
+    "gnome-terminal"
+    "nautilus"
+    "gnome-software"
+    "firefox"
+)
+# 系统必备组件
+packages+=(
+    "xiaomi-nabu-firmware"
+    "xiaomi-nabu-audio"
+    "grub2-efi-aa64"
+    "grub2-efi-aa64-modules"
+    "systemd-oomd-defaults"
+    "systemd-resolved"
+    "glibc-langpack-en"
+    "fuse"
+)
+# 高通平台组件
+packages+=(
+    "qbootctl"
+    "tqftpserv"
+    "pd-mapper"
+    "rmtfs"
+    "qrtr"
+)
+# 实用工具
+packages+=(
+    "NetworkManager-tui"
+    "git"
+    "grubby"
+    "vim"
+)
+# 执行安装命令
+sudo dnf --installroot=$INSTALL_ROOT \
+         --releasever=$FEDORA_RELEASE \
+         --forcearch=aarch64 \
+         --exclude dracut-config-rescue \
+         --noscripts
+         -y install \
+         "${packages[@]}"
 
-# 使用 systemd-nspawn 在 chroot 中执行 dnf5 安装
-sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf \
-    -y \
-    --releasever=$FEDORA_RELEASE \
-    --forcearch=aarch64 \
-    --exclude dracut-config-rescue \
-    --setopt=install_weak_deps=False \
-    install \
-    "${packages[@]}"
+echo "INFO: 步骤 4/5 - 正在 chroot 环境中执行延迟的安装脚本..."
+# 进入chroot并运行所有被延迟的triggers和脚本，特别是ldconfig
+sudo systemd-nspawn -D "$INSTALL_ROOT" /bin/sh -c "rpm -a --triggers && ldconfig"
 
-# --- 在 chroot 环境中进行配置 ---
-echo "INFO: 步骤 3/4 - 在 chroot 环境中配置系统..."
+echo "INFO: 步骤 5/5 - 正在移除官方内核并安装定制内核..."
+sudo dnf --installroot=$INSTALL_ROOT -y remove kernel kernel-core kernel-modules kernel-modules-core --noautoremove
+sudo dnf --installroot=$INSTALL_ROOT -y install kernel-sm8150
 
-# 注入服务和脚本
-echo "  -> 注入 qbootctl 服务"
+# --- 启用关键服务 ---
+echo "INFO: 正在注入并启用 qbootctl 成功启动标记服务..."
 sudo bash -c "cat > '$INSTALL_ROOT/etc/systemd/system/qbootctl-mark-boot-successful.service'" << EOF
 [Unit]
 Description=Qualcomm boot slot ctrl mark boot successful
+
 [Service]
 ExecStart=/usr/bin/qbootctl -m
 Type=oneshot
 RemainAfterExit=yes
+
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "  -> 注入文件系统自动扩展服务"
-sudo mkdir -p "$INSTALL_ROOT/etc/systemd/system/" "$INSTALL_ROOT/usr/local/bin/"
+echo "INFO: 正在启用关键服务..."
+sudo systemd-nspawn -D "$INSTALL_ROOT" systemctl enable tqftpserv.service rmtfs.service gdm.service
+
+# --- 注入首次启动时文件系统扩展服务 ---
+echo "INFO: 正在注入首次启动自动扩展文件系统的服务..."
+# 1. 创建服务文件
+sudo mkdir -p "$INSTALL_ROOT/etc/systemd/system/"
 sudo bash -c "cat > '$INSTALL_ROOT/etc/systemd/system/resize-rootfs.service'" << EOF
 [Unit]
 Description=Resize root filesystem to fill partition
 DefaultDependencies=no
 After=systemd-remount-fs.service
 Before=shutdown.target
+
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/resize-rootfs.sh
+StandardOutput=journal+console
+StandardError=journal+console
 RemainAfterExit=no
+
 [Install]
 WantedBy=basic.target
 EOF
+
+# 2. 创建执行脚本
+sudo mkdir -p "$INSTALL_ROOT/usr/local/bin/"
 sudo bash -c "cat > '$INSTALL_ROOT/usr/local/bin/resize-rootfs.sh'" << 'EOF'
 #!/bin/bash
 set -e
 ROOT_PART=$(findmnt -n -o SOURCE /)
+echo "INFO: Resizing ${ROOT_PART} to fill the partition..."
 resize2fs ${ROOT_PART}
+echo "INFO: Filesystem resized. Disabling service for next boot."
 rm -f /etc/systemd/system/resize-rootfs.service
 rm -f /usr/local/bin/resize-rootfs.sh
 EOF
+
+# 3. 设置权限并启用服务
 sudo chmod 755 "$INSTALL_ROOT/usr/local/bin/resize-rootfs.sh"
+sudo systemd-nspawn -D "$INSTALL_ROOT" systemctl enable resize-rootfs.service
+# ----------------------------------------------------
 
-# 启用服务
-echo "  -> 启用关键服务"
-sudo systemd-nspawn -D "$INSTALL_ROOT" systemctl enable tqftpserv.service rmtfs.service gdm.service resize-rootfs.service qbootctl-mark-boot-successful.service
-
-# 设置root密码
 echo 'root:fedora' | sudo chpasswd --root $INSTALL_ROOT
 echo "警告: 已设置默认root密码为 'fedora'。首次登录后请立即修改！"
 
-# --- 清理 chroot 环境 ---
-echo "INFO: 步骤 4/4 - 清理环境..."
-echo "  -> 清理 DNF 缓存"
-sudo systemd-nspawn -D "$INSTALL_ROOT" /usr/bin/dnf clean all
-echo "  -> 移除临时文件"
+# --- 卸载前清理操作 ---
+echo "INFO: 正在清理日志和DNF缓存以减小镜像体积..."
 sudo rm -rf "$INSTALL_ROOT/var/log/*"
-sudo rm -f "$INSTALL_ROOT/usr/bin/qemu-aarch64-static"
-sudo rm -f "$INSTALL_ROOT/etc/resolv.conf"
+sudo dnf --installroot=$INSTALL_ROOT clean all
 
-# --- 从构建好的目录创建最终的镜像文件 ---
-echo "INFO: 开始从目录创建最终的 Rootfs 镜像文件..."
+# --- 卸载 Rootfs 镜像 ---
+echo "INFO: 卸载 Rootfs 镜像..."
+sudo umount $INSTALL_ROOT
+rmdir $INSTALL_ROOT
+trap - EXIT
 
-echo "  -> 计算所需空间并创建镜像文件"
-ROOTFS_SIZE_BYTES=$(sudo du -sb "$INSTALL_ROOT" | awk '{print $1}')
-# 增加 20% 的额外空间以确保能容纳元数据等
-ROOTFS_FINAL_SIZE=$((ROOTFS_SIZE_BYTES * 12 / 10))
-echo "  -> 内容大小: ${ROOTFS_SIZE_BYTES} B, 最终镜像大小: ${ROOTFS_FINAL_SIZE} B"
-truncate -s $ROOTFS_FINAL_SIZE $ROOTFS_IMG
-mkfs.ext4 -L "fedora_root" $ROOTFS_IMG
-
-echo "  -> 挂载镜像并复制数据"
-MOUNT_DIR=$(mktemp -d)
-trap 'sudo umount "$MOUNT_DIR" 2>/dev/null; rmdir "$MOUNT_DIR" || true; sudo rm -rf "$INSTALL_ROOT"' EXIT
-sudo mount -o loop $ROOTFS_IMG $MOUNT_DIR
-sudo rsync -aHAX "$INSTALL_ROOT/" "$MOUNT_DIR/"
-sudo umount $MOUNT_DIR
-rmdir $MOUNT_DIR
-
-echo "  -> 收缩文件系统到最小尺寸"
+# --- 收缩Rootfs镜像到最小尺寸 ---
+echo "INFO: 正在将Rootfs镜像收缩到最小尺寸..."
 sudo e2fsck -f -y $ROOTFS_IMG
 sudo resize2fs -M $ROOTFS_IMG
+BLOCKS=$(sudo tune2fs -l $ROOTFS_IMG | grep 'Block count' | awk '{print $3}')
+BLOCK_SIZE=$(sudo tune2fs -l $ROOTFS_IMG | grep 'Block size' | awk '{print $3}')
+NEW_SIZE=$((BLOCKS * BLOCK_SIZE))
+echo "INFO: Rootfs最小尺寸计算为 ${NEW_SIZE} 字节。"
+truncate -s $NEW_SIZE $ROOTFS_IMG
+echo "INFO: Rootfs镜像已成功收缩。"
+# ------------------------------------
 
 echo "INFO: Rootfs 构建完成: ${ROOTFS_IMG}"
 
@@ -268,6 +297,7 @@ mcopy -s -i $ESP_IMG $ESP_WORKDIR/* ::
 # 清理
 rm -rf $ESP_WORKDIR boot grub2-efi-aa64-*.rpm
 trap - EXIT
+
 
 echo "##############################################"
 echo "### 构建成功！"

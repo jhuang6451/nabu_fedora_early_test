@@ -17,6 +17,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Install Dependencies
         run: |
           dnf update -y  
@@ -34,8 +39,7 @@ jobs:
             zip \
             findutils \
             util-linux \
-            dnf-utils
-
+            rsync
 
       - name: Run build script
         run: |
@@ -43,9 +47,20 @@ jobs:
           chmod +x ./build-nabu-images.sh
           ./build-nabu-images.sh
 
-      - name: Package Images
+      - name: Prepare Artifacts for Release
+        id: prepare_artifacts
         run: |
-          zip nabu-fedora-images.zip *.img
+          TIMESTAMP=$(date +%Y%m%d)
+          ROOTFS_IMG="fedora-nabu-rootfs-${TIMESTAMP}.img"
+          ESP_IMG="nabu-esp-${TIMESTAMP}.img"
+          ROOTFS_ARCHIVE="fedora-nabu-rootfs-${TIMESTAMP}.tar.gz"
+          
+          echo "Compressing ${ROOTFS_IMG} to ${ROOTFS_ARCHIVE}..."
+          tar -czf ${ROOTFS_ARCHIVE} ${ROOTFS_IMG}
+          
+          # 设置输出变量，供后续步骤使用
+          echo "ROOTFS_ARCHIVE_NAME=${ROOTFS_ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "ESP_IMG_NAME=${ESP_IMG}" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -60,12 +75,22 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset
+      - name: Upload Rootfs Asset (tar.gz)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./nabu-fedora-images.zip
-          asset_name: nabu-fedora-images-${{ github.run_number }}.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
+          asset_name: ${{ steps.prepare_artifacts.outputs.ROOTFS_ARCHIVE_NAME }}
+          asset_content_type: application/gzip
+
+      - name: Upload ESP Asset (.img)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
+          asset_name: ${{ steps.prepare_artifacts.outputs.ESP_IMG_NAME }}
+          asset_content_type: application/octet-stream
