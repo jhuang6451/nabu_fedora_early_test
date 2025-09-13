@@ -38,73 +38,73 @@ jobs:
           tags: ${{ env.CONTAINER_IMAGE }}
           platforms: linux/amd64
 
-  # 步骤二：在容器中制作 aarch64 rootfs
-  create_rootfs:
-    runs-on: ubuntu-latest
-    needs: build_container
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
-      options: --privileged
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  # # 步骤二：在容器中制作 aarch64 rootfs
+  # create_rootfs:
+  #   runs-on: ubuntu-latest
+  #   needs: build_container
+  #   container:
+  #     image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+  #     options: --privileged
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Create aarch64 rootfs
-        run: |
-          chmod +x ./scripts/2_create_rootfs.sh
-          ./scripts/2_create_rootfs.sh
+  #     - name: Create aarch64 rootfs
+  #       run: |
+  #         chmod +x ./scripts/2_create_rootfs.sh
+  #         ./scripts/2_create_rootfs.sh
       
-      - name: Upload rootfs artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rootfs-artifact
-          path: ./${{ env.ROOTFS_NAME }}
+  #     - name: Upload rootfs artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: rootfs-artifact
+  #         path: ./${{ env.ROOTFS_NAME }}
 
-  # 步骤三：利用 rootfs 制作 ESP 镜像
-  create_esp_image:
-    runs-on: ubuntu-latest
-    needs: create_rootfs
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  # # 步骤三：利用 rootfs 制作 ESP 镜像
+  # create_esp_image:
+  #   runs-on: ubuntu-latest
+  #   needs: create_rootfs
+  #   container:
+  #     image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Download rootfs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: rootfs-artifact
-          path: .
+  #     - name: Download rootfs artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: rootfs-artifact
+  #         path: .
 
-      - name: Create ESP image
-        run: |
-          chmod +x ./scripts/3_create_esp.sh
-          ./scripts/3_create_esp.sh
+  #     - name: Create ESP image
+  #       run: |
+  #         chmod +x ./scripts/3_create_esp.sh
+  #         ./scripts/3_create_esp.sh
 
-      - name: Upload ESP image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp-artifact
-          path: ./${{ env.ESP_NAME }}
+  #     - name: Upload ESP image artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: esp-artifact
+  #         path: ./${{ env.ESP_NAME }}
 
-  # 步骤四：创建 Release 并上传镜像文件
-  create_release:
-    runs-on: ubuntu-latest
-    needs: [create_rootfs, create_esp_image]
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+  # # 步骤四：创建 Release 并上传镜像文件
+  # create_release:
+  #   runs-on: ubuntu-latest
+  #   needs: [create_rootfs, create_esp_image]
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - name: Download all artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: artifacts
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Create Release and Upload Assets
-        run: |
-          chmod +x ./scripts/4_create_release.sh
-          ./scripts/4_create_release.sh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Create Release and Upload Assets
+  #       run: |
+  #         chmod +x ./scripts/4_create_release.sh
+  #         ./scripts/4_create_release.sh
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

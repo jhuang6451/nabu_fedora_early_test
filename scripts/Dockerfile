@@ -4,8 +4,8 @@ FROM fedora:42
 # 安装构建 aarch64 rootfs 所需的核心工具
 RUN dnf install -y \
     dnf-utils \
+    dnf-plugins-core \
     qemu-user-static \
-    binfmt-support \
     coreutils \
     tar \
     gzip \
@@ -13,7 +13,13 @@ RUN dnf install -y \
     grub2-efi-aa64 \
     grub2-efi-aa64-cdboot \
     mtools \
+    e2fsprogs \
+    libguestfs-tools \
+    rpm-build \
+    cpio \
+    systemd-container \
+    findutils \
+    util-linux \
+    rsync \
+    curl \
     && dnf clean all
-
-# 设置 aarch64 模拟环境
-RUN /usr/sbin/update-binfmts --enable qemu-aarch64
