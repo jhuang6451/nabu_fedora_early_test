@@ -20,14 +20,9 @@ env:
   ESP_NAME: esp.img
 
 jobs:
-  # setup_runner 作业不再需要，已删除
-
   create_rootfs_and_esp:
-    # 关键修改：在原生的 arm64 runner 上运行
-    runs-on: ubuntu-24.04-arm64
-    # 不再需要 needs: setup_runner
+    runs-on: ubuntu-24.04-arm
     container:
-      # 这个镜像是上一步构建的 arm64 镜像，完美匹配
       image: ghcr.io/${{ github.repository_owner }}/fedora-nabu-builder:42
       options: --privileged
     steps:
@@ -59,8 +54,7 @@ jobs:
           path: ./${{ env.ESP_NAME }}
 
   create_release:
-    # 关键修改：在原生的 arm64 runner 上运行
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     needs: create_rootfs_and_esp
     permissions:
       contents: write
