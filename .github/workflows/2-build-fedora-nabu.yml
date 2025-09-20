@@ -1,14 +1,6 @@
 name: '2. Build Fedora for Nabu'
 
 on:
-  # push:
-  #   branches:
-  #     - alpha
-  #   paths:
-  #     - 'scripts/2_create_rootfs.sh'
-  #     - 'scripts/3_create_esp.sh'
-  #     - 'scripts/4_create_release.sh'
-  #     - .github/workflows/2-build-fedora-nabu.yml
   workflow_dispatch: # 允许手动触发
 
 permissions:
