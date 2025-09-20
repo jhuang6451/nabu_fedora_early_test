@@ -43,10 +43,23 @@ mkdir -p "$ROOTFS_DIR"
 
 # 2. 引导基础系统 (Bootstrap Phase)
 # 安装一个包含 bash 和 dnf 的最小化系统，以便我们可以 chroot 进去
+echo "Bootstrapping Fedora repositories for $ARCH..."
+TEMP_REPO_DIR=$(mktemp -d)
+trap 'rm -rf -- "$TEMP_REPO_DIR"' EXIT
+cat <<EOF > "${TEMP_REPO_DIR}/temp-fedora.repo"
+[temp-fedora]
+name=Temporary Fedora $RELEASEVER - $ARCH
+metalink=https://mirrors.fedoraproject.org/metalink?repo=fedora-$RELEASEVER&arch=$ARCH
+enabled=1
+gpgcheck=0
+skip_if_unavailable=False
+EOF
+
 echo "Bootstrapping base system into rootfs..."
 dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
     --releasever="$RELEASEVER" \
     --setopt=install_weak_deps=False \
+    --setopt="reposdir=${TEMP_REPO_DIR}" \
     --nogpgcheck \
     fedora-repos \
     @core
