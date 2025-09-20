@@ -1,4 +1,5 @@
 *.img
+*.txt
 scripts/ver/
 # Editors
 .vscode/
