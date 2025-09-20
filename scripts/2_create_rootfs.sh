@@ -18,7 +18,6 @@ mount_chroot_fs() {
     mount --bind /sys "$ROOTFS_DIR/sys"
     mount --bind /dev "$ROOTFS_DIR/dev"
     mount --bind /dev/pts "$ROOTFS_DIR/dev/pts"
-    mount --bind /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf"
 }
 
 # Unmount chroot filesystems 函数
@@ -29,7 +28,6 @@ umount_chroot_fs() {
     umount "$ROOTFS_DIR/dev" || true
     umount "$ROOTFS_DIR/sys" || true
     umount "$ROOTFS_DIR/proc" || true
-    umount "$ROOTFS_DIR/etc/resolv.conf" || true
 }
 
 # 确保在脚本退出时总是尝试卸载
@@ -42,6 +40,19 @@ mkdir -p "$ROOTFS_DIR"
 # 2. 先挂载必要的文件系统，以便后续 chroot 操作
 echo "Mounting filesystems for chroot..."
 mount_chroot_fs
+
+# 创建临时 DNS 配置 
+echo "Temporarily setting up DNS for chroot..."
+# 强制删除任何可能存在的旧文件或悬空链接
+rm -f "$ROOTFS_DIR/etc/resolv.conf"
+# 创建一个新的 resolv.conf 文件
+mkdir -p "$ROOTFS_DIR/etc"
+cat <<EOF > "$ROOTFS_DIR/etc/resolv.conf"
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+EOF
 
 # 3. 引导基础系统 (Bootstrap Phase)
 # 安装一个包含 bash 和 dnf 的最小化系统，以便我们可以 chroot 进去
