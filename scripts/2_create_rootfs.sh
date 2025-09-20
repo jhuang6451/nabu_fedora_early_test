@@ -402,18 +402,42 @@ echo 'BUILD_CREATOR="jhuang6451"' >> "/etc/os-release"
 
 
 # ==========================================================================
-# --- 新增部分：设置临时的 root 密码 ---
+# --- 临时用户添加部分 ---
 # ==========================================================================
-echo 'Setting a temporary root password...'
-# 为了在脚本中非交互式地设置密码，我们使用 chpasswd。
-# 这里的默认密码是 'fedora'，您可以根据需要更改。
-# 警告：这是一个公开的默认密码，非常不安全。
-echo 'root:fedora' | /usr/sbin/chpasswd
+echo 'Adding temporary user "user" with sudo privileges...'
 
-echo 'Forcing password change on first login for security...'
-# 使用 passwd --expire 命令，强制 root 用户在首次登录后立即更改密码。
-/usr/bin/passwd --expire root
-# ---------------------------------------------------------------------------
+# 1. 创建名为 'user' 的用户，并将其加入 'wheel' 组。
+#    --create-home (-m) 确保创建用户的主目录 /home/user。
+#    --groups (-G) wheel 是在 Fedora/RHEL/CentOS 上授予 sudo 权限的标准做法。
+useradd --create-home --groups wheel user
+if [ \$? -eq 0 ]; then
+    echo 'User "user" created and added to "wheel" group successfully.'
+else
+    echo 'ERROR: Failed to create user "user".' >&2
+    exit 1
+fi
+
+# 2. 以非交互方式为用户 'user' 设置密码 'fedora'。
+#    使用 'chpasswd' 是在脚本中设置密码最安全、最直接的方法。
+echo 'user:fedora' | chpasswd
+if [ \$? -eq 0 ]; then
+    echo 'Password for "user" has been set to "fedora".'
+else
+    echo 'ERROR: Failed to set password for "user".' >&2
+    exit 1
+fi
+
+# 3. 确保 'wheel' 组拥有 sudo 权限。
+#    这在标准的 Fedora 系统中是默认配置，但为了确保万无一失，我们显式地创建
+#    一个 sudoers 配置文件。这样可以避免主 /etc/sudoers 文件被意外修改的风险。
+#    注意：sudoers 配置文件必须有严格的权限 (0440)。
+SUDOERS_FILE="/etc/sudoers.d/99-wheel-user"
+echo '%wheel ALL=(ALL) ALL' > "\$SUDOERS_FILE"
+chmod 0440 "\$SUDOERS_FILE"
+echo "Sudo access for group 'wheel' has been configured via \$SUDOERS_FILE."
+# ==========================================================================
+# --- 临时用户添加结束 ---
+# ==========================================================================
 
 
 
