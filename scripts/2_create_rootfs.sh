@@ -222,7 +222,7 @@ kernel-install add "$KERNEL_VERSION" "/boot/vmlinuz-$KERNEL_VERSION"
 
 
 # ==========================================================================
-# --- 新增的修复部分：动态查找 UKI 并创建健壮的引导项 ---
+# --- 新增的修复部分：动态查找 UKI 并创建健壮的 system-boot 引导项 ---
 # ==========================================================================
 echo 'Dynamically locating the generated UKI file...'
 # 使用 find 查找由 kernel-install 生成的、包含特定内核版本的 UKI 文件
