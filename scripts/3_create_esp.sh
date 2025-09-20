@@ -1,12 +1,12 @@
 #!/bin/bash
 # ==============================================================================
-# 3_create_esp.sh (v2.3 - Robust UKI Discovery)
+# 3_create_esp.sh (v3.0 - Systemd-Boot Deployment)
 #
 # 功能:
 #   1. 创建并格式化 ESP 镜像。
-#   2. 挂载 rootfs 镜像。
-#   3. 在 rootfs 的 /boot 目录中动态搜索最新的 UKI (.efi) 文件。
-#   4. 将找到的 UKI 复制到 ESP 分区中。
+#   2. 安装 systemd-boot 引导加载程序到 ESP。
+#   3. 将 rootfs 中由 kernel-install 管理的整个 /boot/efi 目录内容
+#      (包括 UKIs, loader configs) 同步到 ESP。
 # ==============================================================================
 
 set -e
@@ -37,33 +37,28 @@ mkfs.vfat -F 32 -n "ESP" "$ESP_NAME"
 mount -o loop "$ESP_NAME" "$ESP_MNT_POINT"
 echo "INFO: ESP mounted at '$ESP_MNT_POINT'."
 
-# 2. 以只读方式挂载 Rootfs
+# 2. 安装 systemd-boot 到 ESP
+# 这会将 UEFI 引导程序 (BOOTAA64.EFI) 安装到 ESP 的标准路径
+echo "INFO: Installing systemd-boot to the ESP..."
+bootctl --esp-path="$ESP_MNT_POINT" install
+
+# 3. 以只读方式挂载 Rootfs
 echo "INFO: Mounting rootfs image '$ROOTFS_NAME'..."
 mount -o loop,ro "$ROOTFS_NAME" "$ROOTFS_MNT_POINT"
 echo "INFO: Rootfs mounted at '$ROOTFS_MNT_POINT'."
 
-# 3. 动态搜索 UKI 文件并复制
-echo "INFO: Searching for the latest UKI file in rootfs..."
-
-# 在 /boot 目录下搜索所有 .efi 文件，并根据修改时间找到最新的一个
-UKI_FILE_PATH=$(find "${ROOTFS_MNT_POINT}/boot" -name "*.efi" -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
-
-if [ -z "$UKI_FILE_PATH" ]; then
-    echo "ERROR: No UKI (.efi file) found anywhere inside the '/boot' directory of the rootfs." >&2
-    echo "ERROR: Please check the logs of '2_create_rootfs.sh' to ensure dracut ran successfully." >&2
+# 4. 将 rootfs 中 /boot/efi 的内容同步到 ESP
+ROOTFS_EFI_CONTENT="${ROOTFS_MNT_POINT}/boot/efi/"
+if [ ! -d "$ROOTFS_EFI_CONTENT" ] || [ -z "$(ls -A "$ROOTFS_EFI_CONTENT")" ]; then
+    echo "ERROR: The directory '$ROOTFS_EFI_CONTENT' in rootfs is empty or does not exist." >&2
+    echo "ERROR: Please ensure 'kernel-install' ran successfully in the previous step." >&2
     exit 1
 fi
 
-echo "INFO: Found UKI at: '$UKI_FILE_PATH'"
+echo "INFO: Syncing EFI content (UKIs, loader configs) from rootfs to ESP..."
+# 使用 rsync 将所有由 kernel-install 生成的文件和目录 (EFI/Linux, loader/)
+# 复制到 ESP 分区中。
+rsync -a "$ROOTFS_EFI_CONTENT" "$ESP_MNT_POINT/"
 
-# 准备 ESP 中的目标目录
-DESTINATION_DIR="${ESP_MNT_POINT}/EFI/fedora"
-DESTINATION_FILE="${DESTINATION_DIR}/fedora.efi"
-mkdir -p "$DESTINATION_DIR"
-
-# 复制文件
-echo "INFO: Copying UKI to ESP as '$DESTINATION_FILE'..."
-cp "$UKI_FILE_PATH" "$DESTINATION_FILE"
-
-echo "SUCCESS: ESP image '$ESP_NAME' created with the discovered UKI."
+echo "SUCCESS: ESP image '$ESP_NAME' created and populated with a full systemd-boot environment."
 exit 0

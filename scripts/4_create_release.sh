@@ -26,10 +26,10 @@ ESP_FILENAME="${ESP_NAME:-esp.img}"
 # 这是下载工件的根目录
 ARTIFACTS_DIR="artifacts"
 
-# --- 已修改：直接在 ARTIFACTS_DIR 中查找文件 ---
-# actions/download-artifact@v4 不会创建额外的子目录层级。
-ROOTFS_PATH="${ARTIFACTS_DIR}/${ROOTFS_FILENAME}"
-ESP_PATH="${ARTIFACTS_DIR}/${ESP_FILENAME}"
+# --- 已修改：在与工件名称匹配的子目录中查找文件 ---
+# actions/download-artifact@v4 会为每个工件创建一个子目录。
+ROOTFS_PATH="${ARTIFACTS_DIR}/rootfs-artifact/${ROOTFS_FILENAME}"
+ESP_PATH="${ARTIFACTS_DIR}/esp-artifact/${ESP_FILENAME}"
 
 # 输出的压缩文件名将是原始文件名加上 .xz 后缀
 ROOTFS_COMPRESSED_PATH="${ROOTFS_PATH}.xz"

@@ -86,16 +86,38 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
     RELEASEVER=\"$RELEASEVER\"
     ARCH=\"$ARCH\"
 
+
+
     echo 'Installing additional packages...'
     dnf install -y --releasever=\$RELEASEVER \
         --repofrompath=\"jhuang6451-copr,https://download.copr.fedorainfracloud.org/results/jhuang6451/nabu_fedora_packages_uefi/fedora-\$RELEASEVER-\$ARCH/\" \
         --repofrompath=\"onesaladleaf-copr,https://download.copr.fedorainfracloud.org/results/onesaladleaf/pocketblue/fedora-\$RELEASEVER-\$ARCH/\" \
         --nogpgcheck \
         --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+        @hardware-support \
+        @standard \
+        @base-graphical \
+        NetworkManager-tui \
+        git \
+        grubby \
+        vim \
+        glibc-langpack-en \
+        btrfs-progs \
+        systemd-resolved \
+        grub2-efi-aa64 \
+        grub2-efi-aa64-modules \
+        qbootctl \
+        tqftpserv \
+        pd-mapper \
+        rmtfs \
+        qrtr \
         kernel-sm8150 \
         xiaomi-nabu-firmware \
+        xiaomi-nabu-audio \
         systemd-boot-unsigned \
         binutils
+
+
 
     echo 'Creating qbootctl.service file...'
     cat <<EOF > \"/etc/systemd/system/qbootctl.service\"
@@ -108,6 +130,14 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
+
+
+
+    echo 'Enabling systemd services...'
+    systemctl enable tqftpserv.service
+    systemctl enable rmtfs.service
+    systemctl enable qbootctl.service
+
 
 
     echo 'Creating /etc/fstab for automatic partition mounting...'
@@ -124,31 +154,65 @@ LABEL=ESP          /boot/efi      vfat    umask=0077,shortname=winnt            
 EOF
 
 
-    echo 'Detecting installed kernel version for dracut config...'
-    KERNEL_VERSION=\$(ls /lib/modules | sort -rV | head -n1)
-    if [ -z \"\$KERNEL_VERSION\" ]; then
-        echo 'ERROR: No kernel version found inside chroot!' >&2
-        exit 1
-    fi
-    echo \"Detected kernel version: \$KERNEL_VERSION\"
 
-    echo 'Creating dracut config for automated UKI generation...'
-    mkdir -p \"/etc/dracut.conf.d/\"
-    cat <<EOF > \"/etc/dracut.conf.d/99-nabu-uki.conf\"
+    echo 'Creating DYNAMIC dracut config for automated UKI generation...'
+    mkdir -p "/etc/dracut.conf.d/"
+    cat <<EOF > "/etc/dracut.conf.d/99-nabu-uki.conf"
+# This is a dynamically-aware configuration for dracut.
+# Generate a UEFI executable
 uefi=yes
+# Specify the UEFI stub
 uefi_stub=/usr/lib/systemd/boot/efi/linuxaarch64.efi.stub
-# 使用动态检测到的内核版本路径
-devicetree=\"/usr/lib/modules/\$KERNEL_VERSION/dtb/qcom/sm8150-xiaomi-nabu.dtb\"
-uefi_cmdline=\"root=LABEL=fedora_root rw quiet\"
+
+# --- THE CRITICAL FIX ---
+# Use dracut's internal '${kernel}' variable.
+# This variable automatically resolves to the version of the kernel
+# for which dracut is currently building an image.
+# The dollar sign is escaped (\$) so that it is written literally
+# into the file, to be interpreted by dracut later, not by the shell now.
+devicetree="/usr/lib/modules/\${kernel}/dtb/qcom/sm8150-xiaomi-nabu.dtb"
+
+# Kernel command line
+uefi_cmdline="root=LABEL=fedora_root rw quiet"
 EOF
 
     echo 'Dracut config created.'
 
-    # 安装内核时，dracut会自动运行并根据新配置生成UKI
-    # 生成的UKI会默认放在 /boot/efi/EFI/Linux/fedora-<hash>.efi
-    # 我们可以强制它重新生成一次，确保初始镜像是最新的
-    echo 'Re-running dracut to generate the initial UKI...'
-    dracut --force --kver \"\$KERNEL_VERSION\"
+
+
+echo 'Detecting installed kernel version for initial UKI generation...'
+    KERNEL_VERSION=\$(ls /lib/modules | sort -rV | head -n1)
+    if [ -z "\$KERNEL_VERSION" ]; then
+        echo 'ERROR: No kernel version found inside chroot!' >&2
+        exit 1
+    fi
+    echo "Detected kernel version for kernel-install: \$KERNEL_VERSION"
+
+    echo 'Configuring kernel-install to generate UKIs...'
+    mkdir -p "/etc/kernel/"
+    cat <<EOF > "/etc/kernel/install.conf"
+# Tell kernel-install to use dracut as the UKI generator.
+uki_generator=dracut
+EOF
+
+
+
+    echo 'Running kernel-install to generate the initial UKI...'
+    kernel-install add "\$KERNEL_VERSION" "/boot/vmlinuz-\$KERNEL_VERSION"
+
+
+
+    echo 'Creating systemd-boot loader configuration...'
+    # 注意：kernel-install 可能会创建 /boot/efi/loader 目录，但我们确保它存在
+    mkdir -p "/boot/efi/loader/"
+    cat <<EOF > "/boot/efi/loader/loader.conf"
+# See loader.conf(5) for details
+timeout 3
+console-mode max
+default fedora-*
+EOF
+
+
 
     echo 'Cleaning dnf cache...'
     dnf clean all
