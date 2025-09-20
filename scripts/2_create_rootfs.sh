@@ -81,46 +81,48 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
 
 # 4. 在 Chroot 环境中安装和配置
 echo "Running main installation and configuration inside chroot..."
-chroot "$ROOTFS_DIR" /bin/bash -c "
-    set -e
-    RELEASEVER=\"$RELEASEVER\"
-    ARCH=\"$ARCH\"
 
+run_in_chroot() {
+    # 将变量导出，以便子 shell (chroot) 可以继承它们
+    export RELEASEVER="$RELEASEVER"
+    export ARCH="$ARCH"
 
+    # 使用 cat 将此函数内的所有命令通过管道传给 chroot
+    cat <<'CHROOT_SCRIPT' | chroot "$ROOTFS_DIR" /bin/bash
+set -e
+set -o pipefail
 
-    echo 'Installing additional packages...'
-    dnf install -y --releasever=\$RELEASEVER \
-        --repofrompath=\"jhuang6451-copr,https://download.copr.fedorainfracloud.org/results/jhuang6451/nabu_fedora_packages_uefi/fedora-\$RELEASEVER-\$ARCH/\" \
-        --repofrompath=\"onesaladleaf-copr,https://download.copr.fedorainfracloud.org/results/onesaladleaf/pocketblue/fedora-\$RELEASEVER-\$ARCH/\" \
-        --nogpgcheck \
-        --setopt=install_weak_deps=False --exclude dracut-config-rescue \
-        @hardware-support \
-        @standard \
-        @base-graphical \
-        NetworkManager-tui \
-        git \
-        grubby \
-        vim \
-        glibc-langpack-en \
-        btrfs-progs \
-        systemd-resolved \
-        grub2-efi-aa64 \
-        grub2-efi-aa64-modules \
-        qbootctl \
-        tqftpserv \
-        pd-mapper \
-        rmtfs \
-        qrtr \
-        kernel-sm8150 \
-        xiaomi-nabu-firmware \
-        xiaomi-nabu-audio \
-        systemd-boot-unsigned \
-        binutils
+echo 'Installing additional packages...'
+dnf install -y --releasever=$RELEASEVER \
+    --repofrompath="jhuang6451-copr,https://download.copr.fedorainfracloud.org/results/jhuang6451/nabu_fedora_packages_uefi/fedora-$RELEASEVER-$ARCH/" \
+    --repofrompath="onesaladleaf-copr,https://download.copr.fedorainfracloud.org/results/onesaladleaf/pocketblue/fedora-$RELEASEVER-$ARCH/" \
+    --nogpgcheck \
+    --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+    @hardware-support \
+    @standard \
+    @base-graphical \
+    NetworkManager-tui \
+    git \
+    grubby \
+    vim \
+    glibc-langpack-en \
+    btrfs-progs \
+    systemd-resolved \
+    grub2-efi-aa64 \
+    grub2-efi-aa64-modules \
+    qbootctl \
+    tqftpserv \
+    pd-mapper \
+    rmtfs \
+    qrtr \
+    kernel-sm8150 \
+    xiaomi-nabu-firmware \
+    xiaomi-nabu-audio \
+    systemd-boot-unsigned \
+    binutils
 
-
-
-    echo 'Creating qbootctl.service file...'
-    cat <<EOF > \"/etc/systemd/system/qbootctl.service\"
+echo 'Creating qbootctl.service file...'
+cat <<EOF > "/etc/systemd/system/qbootctl.service"
 [Unit]
 Description=Qualcomm boot slot ctrl mark boot successful
 [Service]
@@ -131,92 +133,68 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+echo 'Enabling systemd services...'
+systemctl enable tqftpserv.service
+systemctl enable rmtfs.service
+systemctl enable qbootctl.service
 
-
-    echo 'Enabling systemd services...'
-    systemctl enable tqftpserv.service
-    systemctl enable rmtfs.service
-    systemctl enable qbootctl.service
-
-
-
-    echo 'Creating /etc/fstab for automatic partition mounting...'
-    cat <<EOF > "/etc/fstab"
+echo 'Creating /etc/fstab for automatic partition mounting...'
+cat <<EOF > "/etc/fstab"
 # /etc/fstab: static file system information.
-#
-# Use 'blkid' to print the universally unique identifier for a device; this may
-# be used with UUID= as a more robust way to name devices that works even if
-# disks are added and removed. See fstab(5).
-#
-# <file system>  <mount point>  <type>  <options>  <dump>  <pass>
 LABEL=fedora_root  /              ext4    defaults,x-systemd.device-timeout=0   1 1
 LABEL=ESP          /boot/efi      vfat    umask=0077,shortname=winnt            0 2
 EOF
 
-
-
-    echo 'Creating DYNAMIC dracut config for automated UKI generation...'
-    mkdir -p "/etc/dracut.conf.d/"
-    cat <<EOF > "/etc/dracut.conf.d/99-nabu-uki.conf"
+echo 'Creating DYNAMIC dracut config for automated UKI generation...'
+mkdir -p "/etc/dracut.conf.d/"
+cat <<EOF > "/etc/dracut.conf.d/99-nabu-uki.conf"
 # This is a dynamically-aware configuration for dracut.
-# Generate a UEFI executable
 uefi=yes
-# Specify the UEFI stub
 uefi_stub=/usr/lib/systemd/boot/efi/linuxaarch64.efi.stub
-
-# --- THE CRITICAL FIX ---
-# Use dracut's internal '${kernel}' variable.
-# This variable automatically resolves to the version of the kernel
-# for which dracut is currently building an image.
-# The dollar sign is escaped (\$) so that it is written literally
-# into the file, to be interpreted by dracut later, not by the shell now.
+# 使用 dracut 内部的 '\${kernel}' 变量
 devicetree="/usr/lib/modules/\${kernel}/dtb/qcom/sm8150-xiaomi-nabu.dtb"
-
-# Kernel command line
 uefi_cmdline="root=LABEL=fedora_root rw quiet"
 EOF
-
-    echo 'Dracut config created.'
-
-
+echo 'Dracut config created.'
 
 echo 'Detecting installed kernel version for initial UKI generation...'
-    KERNEL_VERSION=\$(ls /lib/modules | sort -rV | head -n1)
-    if [ -z "\$KERNEL_VERSION" ]; then
-        echo 'ERROR: No kernel version found inside chroot!' >&2
-        exit 1
-    fi
-    echo "Detected kernel version for kernel-install: \$KERNEL_VERSION"
+KERNEL_VERSION=$(ls /lib/modules | sort -rV | head -n1)
+if [ -z "$KERNEL_VERSION" ]; then
+    echo 'ERROR: No kernel version found inside chroot!' >&2
+    exit 1
+fi
+echo "Detected kernel version for kernel-install: $KERNEL_VERSION"
 
-    echo 'Configuring kernel-install to generate UKIs...'
-    mkdir -p "/etc/kernel/"
-    cat <<EOF > "/etc/kernel/install.conf"
+echo 'Configuring kernel-install to generate UKIs...'
+mkdir -p "/etc/kernel/"
+cat <<EOF > "/etc/kernel/install.conf"
 # Tell kernel-install to use dracut as the UKI generator.
 uki_generator=dracut
 EOF
 
+echo 'Running kernel-install to generate the initial UKI...'
+kernel-install add "$KERNEL_VERSION" "/boot/vmlinuz-$KERNEL_VERSION"
 
-
-    echo 'Running kernel-install to generate the initial UKI...'
-    kernel-install add "\$KERNEL_VERSION" "/boot/vmlinuz-\$KERNEL_VERSION"
-
-
-
-    echo 'Creating systemd-boot loader configuration...'
-    # 注意：kernel-install 可能会创建 /boot/efi/loader 目录，但我们确保它存在
-    mkdir -p "/boot/efi/loader/"
-    cat <<EOF > "/boot/efi/loader/loader.conf"
+echo 'Creating systemd-boot loader configuration...'
+mkdir -p "/boot/efi/loader/"
+cat <<EOF > "/boot/efi/loader/loader.conf"
 # See loader.conf(5) for details
 timeout 3
 console-mode max
 default fedora-*
 EOF
 
+echo 'Cleaning dnf cache...'
+dnf clean all
+
+CHROOT_SCRIPT
+}
+
+# 现在执行这个函数
+echo "Running main installation and configuration inside chroot..."
+run_in_chroot
 
 
-    echo 'Cleaning dnf cache...'
-    dnf clean all
-"
 
 # 5. 退出 chroot 并卸载文件系统
 echo "Chroot operations completed. Unmounting filesystems..."

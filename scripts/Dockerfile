@@ -28,4 +28,5 @@ RUN dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/r
     systemd-container \
     rpm-build \
     cpio \
+    systemd-boot \
     && dnf clean all
