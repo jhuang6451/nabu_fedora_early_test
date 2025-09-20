@@ -122,6 +122,33 @@ LABEL=fedora_root  /              ext4    defaults,x-systemd.device-timeout=0   
 LABEL=ESP          /boot/efi      vfat    umask=0077,shortname=winnt            0 2
 EOF
 
+
+    echo 'Detecting installed kernel version for dracut config...'
+    KERNEL_VERSION=\$(ls /lib/modules | sort -rV | head -n1)
+    if [ -z \"\$KERNEL_VERSION\" ]; then
+        echo 'ERROR: No kernel version found inside chroot!' >&2
+        exit 1
+    fi
+    echo \"Detected kernel version: \$KERNEL_VERSION\"
+
+    echo 'Creating dracut config for automated UKI generation...'
+    mkdir -p \"/etc/dracut.conf.d/\"
+    cat <<EOF > \"/etc/dracut.conf.d/99-nabu-uki.conf\"
+uefi=yes
+uefi_stub=/usr/lib/systemd/boot/efi/linuxaarch64.efi.stub
+# 使用动态检测到的内核版本路径
+devicetree=\"/usr/lib/modules/\$KERNEL_VERSION/dtb/qcom/sm8150-xiaomi-nabu.dtb\"
+uefi_cmdline=\"root=LABEL=fedora_root rw quiet\"
+EOF
+
+    echo 'Dracut config created.'
+
+    # 安装内核时，dracut会自动运行并根据新配置生成UKI
+    # 生成的UKI会默认放在 /boot/efi/EFI/Linux/fedora-<hash>.efi
+    # 我们可以强制它重新生成一次，确保初始镜像是最新的
+    echo 'Re-running dracut to generate the initial UKI...'
+    dracut --force --kver \"\$KERNEL_VERSION\"
+
     echo 'Cleaning dnf cache...'
     dnf clean all
 "
