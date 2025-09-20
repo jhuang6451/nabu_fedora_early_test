@@ -94,7 +94,8 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
         --setopt=install_weak_deps=False --exclude dracut-config-rescue \
         kernel-sm8150 \
         xiaomi-nabu-firmware \
-        systemd-boot-unsigned
+        systemd-boot-unsigned \
+        binutils
 
     echo 'Creating qbootctl.service file...'
     cat <<EOF > \"/etc/systemd/system/qbootctl.service\"
