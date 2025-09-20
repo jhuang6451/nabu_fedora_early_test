@@ -18,8 +18,7 @@ mount_chroot_fs() {
     mount --bind /sys "$ROOTFS_DIR/sys"
     mount --bind /dev "$ROOTFS_DIR/dev"
     mount --bind /dev/pts "$ROOTFS_DIR/dev/pts"
-    # 复制 resolv.conf 以便在 chroot 中能够解析域名
-    cp /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf"
+    mount --bind /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf"
 }
 
 # Unmount chroot filesystems 函数
@@ -30,8 +29,7 @@ umount_chroot_fs() {
     umount "$ROOTFS_DIR/dev" || true
     umount "$ROOTFS_DIR/sys" || true
     umount "$ROOTFS_DIR/proc" || true
-    # 移除复制的 resolv.conf
-    rm -f "$ROOTFS_DIR/etc/resolv.conf"
+    umount "$ROOTFS_DIR/etc/resolv.conf" || true
 }
 
 # 确保在脚本退出时总是尝试卸载
