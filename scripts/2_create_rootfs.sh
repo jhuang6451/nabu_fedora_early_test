@@ -119,7 +119,6 @@ dnf install -y --releasever=$RELEASEVER \
     grubby \
     vim \
     glibc-langpack-en \
-    btrfs-progs \
     systemd-resolved \
     grub2-efi-aa64 \
     grub2-efi-aa64-modules \
