@@ -82,6 +82,16 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
 echo "Cleaning up temporary repository..."
 rm -rf -- "$TEMP_REPO_DIR"
 
+echo "Copying first-boot scripts into rootfs..."
+# 确保目标目录存在
+mkdir -p "$ROOTFS_DIR/usr/local/bin"
+# 复制自动扩展脚本
+cp ./scripts/resize-rootfs.sh "$ROOTFS_DIR/usr/local/bin/resize-rootfs.sh"
+chmod +x "$ROOTFS_DIR/usr/local/bin/resize-rootfs.sh"
+# 复制交互式配置脚本
+cp ./scripts/post_install.sh "$ROOTFS_DIR/usr/local/bin/post_install.sh"
+chmod +x "$ROOTFS_DIR/usr/local/bin/post_install.sh"
+
 # 4. 在 Chroot 环境中安装和配置
 echo "Running main installation and configuration inside chroot..."
 
@@ -206,6 +216,44 @@ EOF
 
 
 
+echo 'Adding udev rule for asynchronous firmware loading to improve boot times...'
+mkdir -p "/etc/udev/rules.d/"
+cat <<EOF > "/etc/udev/rules.d/99-async-firmware-load.rules"
+# This rule tells the kernel to load firmware files in the background
+# ("asynchronously") instead of pausing the boot process to wait for them.
+# This dramatically speeds up boot times, especially if a driver requests
+# firmware that doesn't exist.
+SUBSYSTEM=="firmware", ACTION=="add", ATTR{loading}="-1"
+EOF
+echo 'Asynchronous firmware loading rule created.'
+
+
+
+echo 'Configuring zram swap for improved performance under memory pressure...'
+# zram-generator-defaults is installed but we want to provide our own config
+mkdir -p "/etc/systemd/"
+cat <<EOF > "/etc/systemd/zram-generator.conf"
+# This configuration enables a compressed RAM-based swap device (zram).
+# It significantly improves system responsiveness and multitasking on
+# devices with a fixed amount of RAM.
+[zram0]
+# Set the uncompressed swap size to be equal to the total physical RAM.
+# This is a balanced value providing a large swap space without risking
+# system thrashing under heavy load.
+zram-size = ram
+
+# Use zstd compression for the best balance of speed and compression ratio.
+compression-algorithm = zstd
+EOF
+echo 'Zram swap configured.'
+
+
+
+# --------------------------------------------------------------------------
+# --- 集成首次启动服务 ---
+# --------------------------------------------------------------------------
+
+# --- 1. 创建并启用自动扩展文件系统服务 (非交互式) ---
 echo 'Creating first-boot resize service...'
 
 cat <<'EOF' > "/usr/local/bin/firstboot-resize.sh"
@@ -252,38 +300,34 @@ EOF
 systemctl enable firstboot-resize.service
 echo 'First-boot resize service created and enabled.'
 
+    
+# 2. --- 创建并启用交互式配置服务 ---
+echo 'Creating interactive first-boot setup service...'
+cat <<'EOF' > "/etc/systemd/system/first-boot-setup.service"
+[Unit]
+Description=Interactive First-Boot Setup
+# 在 resize 服务之后，在图形界面之前运行
+After=resize-rootfs.service
+Before=graphical.target
 
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/post_install.sh
+# 关键: 将服务的输入输出连接到物理控制台
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+RemainAfterExit=no
 
-echo 'Adding udev rule for asynchronous firmware loading to improve boot times...'
-mkdir -p "/etc/udev/rules.d/"
-cat <<EOF > "/etc/udev/rules.d/99-async-firmware-load.rules"
-# This rule tells the kernel to load firmware files in the background
-# ("asynchronously") instead of pausing the boot process to wait for them.
-# This dramatically speeds up boot times, especially if a driver requests
-# firmware that doesn't exist.
-SUBSYSTEM=="firmware", ACTION=="add", ATTR{loading}="-1"
+[Install]
+WantedBy=default.target
 EOF
-echo 'Asynchronous firmware loading rule created.'
+# 启用服务
+systemctl enable first-boot-setup.service
 
-
-
-echo 'Configuring zram swap for improved performance under memory pressure...'
-# zram-generator-defaults is installed but we want to provide our own config
-mkdir -p "/etc/systemd/"
-cat <<EOF > "/etc/systemd/zram-generator.conf"
-# This configuration enables a compressed RAM-based swap device (zram).
-# It significantly improves system responsiveness and multitasking on
-# devices with a fixed amount of RAM.
-[zram0]
-# Set the uncompressed swap size to be equal to the total physical RAM.
-# This is a balanced value providing a large swap space without risking
-# system thrashing under heavy load.
-zram-size = ram
-
-# Use zstd compression for the best balance of speed and compression ratio.
-compression-algorithm = zstd
-EOF
-echo 'Zram swap configured.'
+echo 'First-boot services created and enabled.'
+    
+# --------------------------------------------------------------------------
 
 
 
