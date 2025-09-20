@@ -57,11 +57,23 @@ echo "INFO: Compressing '${ROOTFS_PATH}' using xz with multi-threading..."
 xz -T0 -v "$ROOTFS_PATH"
 echo "INFO: Compression successful. Output: '${ROOTFS_COMPRESSED_PATH}'"
 
+# 将 ESP img 文件也进行压缩
+echo "INFO: Compressing '${ESP_PATH}' using xz with multi-threading..."
+ESP_COMPRESSED_PATH="${ESP_PATH}.xz"
+xz -T0 -v "$ESP_PATH"
+echo "INFO: Compression successful. Output: '${ESP_COMPRESSED_PATH}'"
+
 # 3. 检查压缩文件是否存在
 if [ ! -f "$ROOTFS_COMPRESSED_PATH" ]; then
     echo "ERROR: Compressed rootfs file was not created!"
     exit 1
 fi
+# --- 新增检查 ---
+if [ ! -f "$ESP_COMPRESSED_PATH" ]; then
+    echo "ERROR: Compressed ESP file was not created!"
+    exit 1
+fi
+
 
 # 4. 准备创建 Release
 TAG="fedora-nabu-$(date +'%Y%m%d-%H%M')"
@@ -74,7 +86,7 @@ Automated build of Fedora 42 for Xiaomi Pad 5 (nabu).
 
 **Assets:**
 - \`${ROOTFS_FILENAME}.xz\`: The compressed rootfs image. Decompress before use.
-- \`${ESP_FILENAME}\`: The bootable ESP (EFI System Partition) image.
+- \`${ESP_FILENAME}.xz\`: The compressed ESP image. Decompress before use.
 
 This build was triggered by commit: [${GITHUB_SHA:0:7}](${COMMIT_URL})
 EOF
@@ -86,6 +98,6 @@ gh release create "$TAG" \
     --title "$RELEASE_TITLE" \
     --notes "$RELEASE_NOTES" \
     "$ROOTFS_COMPRESSED_PATH" \
-    "$ESP_PATH"
+    "$ESP_COMPRESSED_PATH"
 
 echo "SUCCESS: Release ${TAG} created successfully with assets."

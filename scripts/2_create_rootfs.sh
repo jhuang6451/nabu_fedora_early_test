@@ -124,6 +124,8 @@ dnf install -y --releasever=$RELEASEVER \
     systemd-boot-unsigned \
     binutils
 
+
+
 echo 'Creating qbootctl.service file...'
 cat <<EOF > "/etc/systemd/system/qbootctl.service"
 [Unit]
@@ -136,10 +138,14 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+
+
 echo 'Enabling systemd services...'
 systemctl enable tqftpserv.service
 systemctl enable rmtfs.service
 systemctl enable qbootctl.service
+
+
 
 echo 'Creating /etc/fstab for automatic partition mounting...'
 cat <<EOF > "/etc/fstab"
@@ -147,6 +153,8 @@ cat <<EOF > "/etc/fstab"
 LABEL=fedora_root  /              ext4    defaults,x-systemd.device-timeout=0   1 1
 LABEL=ESP          /boot/efi      vfat    umask=0077,shortname=winnt            0 2
 EOF
+
+
 
 echo 'Creating DYNAMIC dracut config for automated UKI generation...'
 mkdir -p "/etc/dracut.conf.d/"
@@ -160,6 +168,8 @@ uefi_cmdline="root=LABEL=fedora_root rw quiet"
 EOF
 echo 'Dracut config created.'
 
+
+
 echo 'Detecting installed kernel version for initial UKI generation...'
 KERNEL_VERSION=$(ls /lib/modules | sort -rV | head -n1)
 if [ -z "$KERNEL_VERSION" ]; then
@@ -168,6 +178,8 @@ if [ -z "$KERNEL_VERSION" ]; then
 fi
 echo "Detected kernel version for kernel-install: $KERNEL_VERSION"
 
+
+
 echo 'Configuring kernel-install to generate UKIs...'
 mkdir -p "/etc/kernel/"
 cat <<EOF > "/etc/kernel/install.conf"
@@ -175,8 +187,12 @@ cat <<EOF > "/etc/kernel/install.conf"
 uki_generator=dracut
 EOF
 
+
+
 echo 'Running kernel-install to generate the initial UKI...'
 kernel-install add "$KERNEL_VERSION" "/boot/vmlinuz-$KERNEL_VERSION"
+
+
 
 echo 'Creating systemd-boot loader configuration...'
 mkdir -p "/boot/efi/loader/"
@@ -186,6 +202,61 @@ timeout 3
 console-mode max
 default fedora-*
 EOF
+
+
+
+echo 'Creating first-boot resize service...'
+
+cat <<'EOF' > "/usr/local/bin/firstboot-resize.sh"
+#!/bin/bash
+set -e
+# 获取根分区的设备路径 (e.g., /dev/mmcblk0pXX)
+ROOT_DEV=$(findmnt -n -o SOURCE /)
+if [ -z "$ROOT_DEV" ]; then
+    echo "Could not find root device. Aborting resize." >&2
+    exit 1
+fi
+echo "Resizing filesystem on ${ROOT_DEV}..."
+# 扩展文件系统以填充整个分区
+resize2fs "${ROOT_DEV}"
+# 任务完成，禁用并移除此服务，确保下次启动不再运行
+systemctl disable firstboot-resize.service
+rm -f /etc/systemd/system/firstboot-resize.service
+rm -f /usr/local/bin/firstboot-resize.sh
+echo "Filesystem resized and service removed."
+EOF
+
+# 赋予脚本执行权限
+chmod +x "/usr/local/bin/firstboot-resize.sh"
+
+# 创建 systemd 服务单元
+cat <<EOF > "/etc/systemd/system/firstboot-resize.service"
+[Unit]
+Description=Resize root filesystem to fill partition on first boot
+# 确保在文件系统挂载后执行
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/firstboot-resize.sh
+# StandardOutput=journal+console
+RemainAfterExit=false
+
+[Install]
+# 链接到默认的目标，使其能够自启动
+WantedBy=default.target
+EOF
+
+# 启用服务
+systemctl enable firstboot-resize.service
+echo 'First-boot resize service created and enabled.'
+
+
+
+echo 'Adding creator signature to /etc/os-release...'
+echo 'BUILD_CREATOR="jhuang6451"' >> "/etc/os-release"
+
+
 
 echo 'Cleaning dnf cache...'
 dnf clean all
