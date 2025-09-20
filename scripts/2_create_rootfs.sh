@@ -85,9 +85,6 @@ rm -rf -- "$TEMP_REPO_DIR"
 echo "Copying first-boot scripts into rootfs..."
 # 确保目标目录存在
 mkdir -p "$ROOTFS_DIR/usr/local/bin"
-# 复制自动扩展脚本
-cp ./scripts/resize-rootfs.sh "$ROOTFS_DIR/usr/local/bin/resize-rootfs.sh"
-chmod +x "$ROOTFS_DIR/usr/local/bin/resize-rootfs.sh"
 # 复制交互式配置脚本
 cp ./scripts/post_install.sh "$ROOTFS_DIR/usr/local/bin/post_install.sh"
 chmod +x "$ROOTFS_DIR/usr/local/bin/post_install.sh"
