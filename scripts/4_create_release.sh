@@ -88,7 +88,7 @@ Automated build of Fedora 42 for Xiaomi Pad 5 (nabu).
 - \`${ROOTFS_FILENAME}.xz\`: The compressed rootfs image. Decompress before use.
 - \`${ESP_FILENAME}.xz\`: The compressed ESP image. Decompress before use.
 
-This build was triggered by commit: [${GITHUB_SHA:0:7}](${COMMIT_URL})
+This build is based on commit: [${GITHUB_SHA:0:7}](${COMMIT_URL})
 EOF
 )
 
