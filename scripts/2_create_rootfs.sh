@@ -60,7 +60,7 @@ EOF
 # 安装一个包含 bash 和 dnf 的最小化系统，以便我们可以 chroot 进去
 echo "Bootstrapping Fedora repositories for $ARCH..."
 TEMP_REPO_DIR=$(mktemp -d)
-trap 'rm -rf -- "$TEMP_REPO_DIR"' EXIT
+
 cat <<EOF > "${TEMP_REPO_DIR}/temp-fedora.repo"
 [temp-fedora]
 name=Temporary Fedora $RELEASEVER - $ARCH
@@ -78,6 +78,9 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
     --nogpgcheck \
     fedora-repos \
     @core
+
+echo "Cleaning up temporary repository..."
+rm -rf -- "$TEMP_REPO_DIR"
 
 # 4. 在 Chroot 环境中安装和配置
 echo "Running main installation and configuration inside chroot..."
