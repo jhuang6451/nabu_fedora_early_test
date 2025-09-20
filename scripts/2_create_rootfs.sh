@@ -122,7 +122,8 @@ dnf install -y --releasever=$RELEASEVER \
     xiaomi-nabu-firmware \
     xiaomi-nabu-audio \
     systemd-boot-unsigned \
-    binutils
+    binutils \
+    zram-generator
 
 
 
@@ -250,6 +251,39 @@ EOF
 # 启用服务
 systemctl enable firstboot-resize.service
 echo 'First-boot resize service created and enabled.'
+
+
+
+echo 'Adding udev rule for asynchronous firmware loading to improve boot times...'
+mkdir -p "/etc/udev/rules.d/"
+cat <<EOF > "/etc/udev/rules.d/99-async-firmware-load.rules"
+# This rule tells the kernel to load firmware files in the background
+# ("asynchronously") instead of pausing the boot process to wait for them.
+# This dramatically speeds up boot times, especially if a driver requests
+# firmware that doesn't exist.
+SUBSYSTEM=="firmware", ACTION=="add", ATTR{loading}="-1"
+EOF
+echo 'Asynchronous firmware loading rule created.'
+
+
+
+echo 'Configuring zram swap for improved performance under memory pressure...'
+# zram-generator-defaults is installed but we want to provide our own config
+mkdir -p "/etc/systemd/"
+cat <<EOF > "/etc/systemd/zram-generator.conf"
+# This configuration enables a compressed RAM-based swap device (zram).
+# It significantly improves system responsiveness and multitasking on
+# devices with a fixed amount of RAM.
+[zram0]
+# Set the uncompressed swap size to be equal to the total physical RAM.
+# This is a balanced value providing a large swap space without risking
+# system thrashing under heavy load.
+zram-size = ram
+
+# Use zstd compression for the best balance of speed and compression ratio.
+compression-algorithm = zstd
+EOF
+echo 'Zram swap configured.'
 
 
 
