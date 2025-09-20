@@ -58,7 +58,7 @@ fi
 
 # 2. 挂载 Rootfs 镜像 (只读)
 echo "INFO: Mounting rootfs image '$ROOTFS_NAME' (read-only)..."
-mount -o loop,ro "$ROOTFS_NAME" "$ROOTFS_MNT_POINT"
+mount -o loop,rw "$ROOTFS_NAME" "$ROOTFS_MNT_POINT"
 echo "INFO: Rootfs mounted at '$ROOTFS_MNT_POINT'."
 
 # 3. 动态检测内核版本 (已修正为 v1.4 的稳健方法)
