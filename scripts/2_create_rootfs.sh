@@ -39,7 +39,11 @@ trap umount_chroot_fs EXIT
 echo "Creating rootfs directory: $ROOTFS_DIR"
 mkdir -p "$ROOTFS_DIR"
 
-# 2. 引导基础系统 (Bootstrap Phase)
+# 2. 先挂载必要的文件系统，以便后续 chroot 操作
+echo "Mounting filesystems for chroot..."
+mount_chroot_fs
+
+# 3. 引导基础系统 (Bootstrap Phase)
 # 安装一个包含 bash 和 dnf 的最小化系统，以便我们可以 chroot 进去
 echo "Bootstrapping Fedora repositories for $ARCH..."
 TEMP_REPO_DIR=$(mktemp -d)
@@ -62,12 +66,8 @@ dnf install -y --installroot="$ROOTFS_DIR" --forcearch="$ARCH" \
     fedora-repos \
     @core
 
-# 3. 在 Chroot 环境中安装和配置
-echo "Mounting filesystems for chroot..."
-mount_chroot_fs
-
+# 4. 在 Chroot 环境中安装和配置
 echo "Running main installation and configuration inside chroot..."
-# 现在 $ROOTFS_DIR 里面有 /bin/bash 了，可以安全地 chroot
 chroot "$ROOTFS_DIR" /bin/bash -c "
     set -e
     RELEASEVER=\"$RELEASEVER\"
@@ -121,12 +121,13 @@ EOF
     dnf clean all
 "
 
+# 5. 退出 chroot 并卸载文件系统
 echo "Chroot operations completed. Unmounting filesystems..."
 umount_chroot_fs
 # 重置 trap，因为我们已经手动卸载了
 trap - EXIT
 
-# 4. 将 rootfs 打包为 img 文件 (注意：这里不再需要 dnf clean all)
+# 6. 将 rootfs 打包为 img 文件 (注意：这里不再需要 dnf clean all)
 echo "Creating rootfs image: $ROOTFS_NAME (size: $IMG_SIZE)..."
 fallocate -l "$IMG_SIZE" "$ROOTFS_NAME"
 mkfs.ext4 -F "$ROOTFS_NAME"
