@@ -58,21 +58,22 @@ jobs:
     needs: create_rootfs_and_esp
     permissions:
       contents: write
-    # 新增 env 块，将变量传递给此作业中的所有步骤
     env:
       ROOTFS_NAME: fedora-42-nabu-rootfs.img
       ESP_NAME: esp.img
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh cli 需要这个
-      # GitHub Actions 会自动填充 GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_SHA
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # 步骤 1: 先检出仓库，获取发布脚本
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤 2: 再下载工件，它们会被放入已检出的工作目录中
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      # 步骤 3: 运行发布脚本，此时脚本和工件都已就绪
       - name: Create Release and Upload Assets
         run: |
           cp ./scripts/4_create_release.sh ./4_create_release.sh
