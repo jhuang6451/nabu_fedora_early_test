@@ -58,6 +58,12 @@ jobs:
     needs: create_rootfs_and_esp
     permissions:
       contents: write
+    # 新增 env 块，将变量传递给此作业中的所有步骤
+    env:
+      ROOTFS_NAME: ${{ env.ROOTFS_NAME }}
+      ESP_NAME: ${{ env.ESP_NAME }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh cli 需要这个
+      # GitHub Actions 会自动填充 GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_SHA
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -72,5 +78,3 @@ jobs:
           cp ./scripts/4_create_release.sh ./4_create_release.sh
           chmod +x 4_create_release.sh
           ./4_create_release.sh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

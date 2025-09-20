@@ -109,7 +109,8 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
         qrtr \
         kernel-sm8150 \
         xiaomi-nabu-firmware \
-        xiaomi-nabu-audio
+        xiaomi-nabu-audio \
+        systemd-boot-unsigned
 
     echo 'Creating qbootctl.service file...'
     cat <<EOF > \"/etc/systemd/system/qbootctl.service\"
@@ -128,6 +129,19 @@ EOF
     systemctl enable rmtfs.service
     systemctl enable qbootctl.service
 
+    echo 'Creating /etc/fstab for automatic partition mounting...'
+    cat <<EOF > "/etc/fstab"
+# /etc/fstab: static file system information.
+#
+# Use 'blkid' to print the universally unique identifier for a device; this may
+# be used with UUID= as a more robust way to name devices that works even if
+# disks are added and removed. See fstab(5).
+#
+# <file system>  <mount point>  <type>  <options>  <dump>  <pass>
+LABEL=fedora_root  /              ext4    defaults,x-systemd.device-timeout=0   1 1
+LABEL=ESP          /boot/efi      vfat    umask=0077,shortname=winnt            0 2
+EOF
+
     echo 'Cleaning dnf cache...'
     dnf clean all
 "
@@ -141,7 +155,7 @@ trap - EXIT
 # 6. 将 rootfs 打包为 img 文件 (注意：这里不再需要 dnf clean all)
 echo "Creating rootfs image: $ROOTFS_NAME (size: $IMG_SIZE)..."
 fallocate -l "$IMG_SIZE" "$ROOTFS_NAME"
-mkfs.ext4 -F "$ROOTFS_NAME"
+mkfs.ext4 -L fedora_root -F "$ROOTFS_NAME" # 设置标签
 MOUNT_DIR=$(mktemp -d)
 trap 'rmdir -- "$MOUNT_DIR"' EXIT # 确保临时挂载目录在脚本退出时被清理
 mount -o loop "$ROOTFS_NAME" "$MOUNT_DIR"
@@ -155,10 +169,24 @@ echo "Rootfs image created as $ROOTFS_NAME"
 
 # 5. 最小化并压缩 img 文件
 echo "Minimizing the image file..."
-e2fsck -f -y "$ROOTFS_NAME"
+e2fsck -f -y "$ROOTFS_NAME" || true # 忽略可能出现的“clean”错误
+echo "Resizing filesystem to minimum size..."
 resize2fs -M "$ROOTFS_NAME"
-BLOCK_SIZE=\$(tune2fs -l "$ROOTFS_NAME" | grep 'Block size' | awk '{print \$3}')
-BLOCK_COUNT=\$(dumpe2fs -h "$ROOTFS_NAME" | grep 'Block count' | awk '{print \$3}')
-NEW_SIZE=\$((BLOCK_SIZE * BLOCK_COUNT))
-truncate -s \$NEW_SIZE "$ROOTFS_NAME"
-echo "Image minimized to \$NEW_SIZE bytes."
+
+# 更稳健地获取块大小和块数量
+echo "Calculating new image size..."
+BLOCK_INFO=$(dumpe2fs -h "$ROOTFS_NAME" 2>/dev/null)
+BLOCK_SIZE=$(echo "$BLOCK_INFO" | grep 'Block size:' | awk '{print $3}')
+BLOCK_COUNT=$(echo "$BLOCK_INFO" | grep 'Block count:' | awk '{print $3}')
+
+# 检查是否成功获取了数值
+if ! [[ "$BLOCK_SIZE" =~ ^[0-9]+$ ]] || ! [[ "$BLOCK_COUNT" =~ ^[0-9]+$ ]]; then
+    echo "Error: Failed to retrieve block size or block count from image."
+    exit 1
+fi
+
+# 计算新的大小并进行 truncate
+NEW_SIZE=$((BLOCK_SIZE * BLOCK_COUNT))
+echo "New calculated size is $NEW_SIZE bytes."
+truncate -s $NEW_SIZE "$ROOTFS_NAME"
+echo "Image minimized successfully."
