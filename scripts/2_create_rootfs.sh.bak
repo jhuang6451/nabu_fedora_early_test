@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# ----- THIS VERSION IS FOR TESTING ONLY -----
-
 set -e
 
 # 定义变量
@@ -92,8 +90,26 @@ chroot "$ROOTFS_DIR" /bin/bash -c "
         --repofrompath=\"onesaladleaf-copr,https://download.copr.fedorainfracloud.org/results/onesaladleaf/pocketblue/fedora-\$RELEASEVER-\$ARCH/\" \
         --nogpgcheck \
         --setopt=install_weak_deps=False --exclude dracut-config-rescue \
+        @hardware-support \
+        @standard \
+        @base-graphical \
+        NetworkManager-tui \
+        git \
+        grubby \
+        vim \
+        glibc-langpack-en \
+        btrfs-progs \
+        systemd-resolved \
+        grub2-efi-aa64 \
+        grub2-efi-aa64-modules \
+        qbootctl \
+        tqftpserv \
+        pd-mapper \
+        rmtfs \
+        qrtr \
         kernel-sm8150 \
         xiaomi-nabu-firmware \
+        xiaomi-nabu-audio \
         systemd-boot-unsigned
 
     echo 'Creating qbootctl.service file...'
@@ -108,6 +124,10 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+    echo 'Enabling systemd services...'
+    systemctl enable tqftpserv.service
+    systemctl enable rmtfs.service
+    systemctl enable qbootctl.service
 
     echo 'Creating /etc/fstab for automatic partition mounting...'
     cat <<EOF > "/etc/fstab"
