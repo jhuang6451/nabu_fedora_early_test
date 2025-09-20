@@ -61,13 +61,13 @@ echo "INFO: Mounting rootfs image '$ROOTFS_NAME' (read-only)..."
 mount -o loop,ro "$ROOTFS_NAME" "$ROOTFS_MNT_POINT"
 echo "INFO: Rootfs mounted at '$ROOTFS_MNT_POINT'."
 
-# 3. 动态检测内核版本 (v1.3 - 使用更安全的 read)
+# 3. 动态检测内核版本 (已修正为 v1.4 的稳健方法)
 echo "INFO: Detecting kernel version from rootfs..."
-# 使用 find... | read... 是处理 null 分隔符最安全的方式，避免 command substitution 的 warning
-KERNEL_VMLINUZ_REL_PATH="" # 初始化变量
-find "$ROOTFS_MNT_POINT/boot/" -name "vmlinuz-*" -not -name "*rescue*" -printf "%P\n" | sort -rV | head -n1 | while read -r line; do
-    KERNEL_VMLINUZ_REL_PATH="$line"
-done
+# 使用 find... | sort ... | head ... 配合命令替换来获取最新内核的文件名。
+# 这是最直接且兼容性好的方法，因为内核文件名不包含换行符。
+# -maxdepth 1 确保只在 /boot 目录下查找，不进入子目录。
+# -printf "%f\n" 只打印不带路径的文件名，更干净。
+VMLINUZ_FILENAME=$(find "$ROOTFS_MNT_POINT/boot/" -maxdepth 1 -name "vmlinuz-*" -not -name "*rescue*" -printf "%f\n" | sort -rV | head -n1)
 
 if [ -z "$KERNEL_VMLINUZ_REL_PATH" ]; then
     echo "ERROR: Could not find any 'vmlinuz-*' kernel image (excluding rescue) in '$ROOTFS_MNT_POINT/boot/'."
