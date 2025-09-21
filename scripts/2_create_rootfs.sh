@@ -118,12 +118,9 @@ dnf install -y --releasever=$RELEASEVER \
     @base-graphical \
     NetworkManager-tui \
     git \
-    grubby \
     vim \
     glibc-langpack-en \
     systemd-resolved \
-    grub2-efi-aa64 \
-    grub2-efi-aa64-modules \
     qbootctl \
     tqftpserv \
     pd-mapper \
@@ -186,7 +183,12 @@ uefi=yes
 uefi_stub=/usr/lib/systemd/boot/efi/linuxaarch64.efi.stub
 # 使用 dracut 内部的 '${kernel}' 变量
 devicetree="/usr/lib/modules/${kernel}/dtb/qcom/sm8150-xiaomi-nabu.dtb"
+
+# --- Robust Kernel Command Line ---
+# uefi_cmdline is the specific option for UKIs.
 uefi_cmdline="root=LABEL=fedora_root rw quiet"
+# kernel_cmdline is a more general option that also gets included.
+kernel_cmdline="root=LABEL=fedora_root rw quiet"
 EOF
 echo 'Dracut config created.'
 # --------------------------------------------------------------------------
@@ -213,6 +215,7 @@ cat <<EOF > "/etc/kernel/install.conf"
 # Tell kernel-install to use dracut as the UKI generator.
 uki_generator=dracut
 EOF
+#FIXME
 
 # --- 3. 运行一次 kernel-install 来生成 UKI ---
 echo 'Running kernel-install to generate the initial UKI...'
@@ -221,9 +224,9 @@ kernel-install add "$KERNEL_VERSION" "/boot/vmlinuz-$KERNEL_VERSION"
 
 
 
-# ==========================================================================
-# --- 新增的修复部分：动态查找 UKI 并创建健壮的 system-boot 引导项 ---
-# ==========================================================================
+# ==================================================================================================
+# --- temporary fix (because of dracut conf issue): 动态查找 UKI 并创建健壮的 system-boot 引导项 ---
+# ==================================================================================================
 echo 'Dynamically locating the generated UKI file...'
 # 使用 find 查找由 kernel-install 生成的、包含特定内核版本的 UKI 文件
 UKI_FILE_PATH=$(find "/boot/efi/EFI/Linux/" -name "linux-${KERNEL_VERSION}-*.efi" -print -quit)
@@ -252,9 +255,10 @@ options    root=LABEL=fedora_root rw quiet
 EOF
 
 echo "Boot loader entry created at '$ENTRY_FILE'"
-# ==========================================================================
-# --- 修复部分结束 ---
-# ==========================================================================
+# ==================================================================================================
+# --- temporary fix end ---
+#TODO: remove this after dracut conf issue is fixed
+# ==================================================================================================
 
 
 
@@ -265,10 +269,11 @@ echo 'Creating systemd-boot loader configuration...'
 mkdir -p "/boot/efi/loader/"
 cat <<EOF > "/boot/efi/loader/loader.conf"
 # See loader.conf(5) for details
-timeout 3
+timeout 6
 console-mode max
 default fedora-*
 EOF
+#TODO : 这里的 default 需要动态设置为上面生成的那个 entry 文件
 # --------------------------------------------------------------------------
 
 
@@ -289,7 +294,7 @@ echo 'UFS driver config for dracut created.'
 
 
 # ==========================================================================
-# --- 新增部分：配置 zram 交换分区 ---
+# --- 配置 zram 交换分区 ---
 # ==========================================================================
 echo 'Configuring zram swap for improved performance under memory pressure...'
 # zram-generator-defaults is installed but we want to provide our own config
@@ -388,6 +393,7 @@ echo 'First-boot resize service created and enabled.'
 # systemctl enable first-boot-setup.service
 
 echo 'First-boot services created and enabled.'
+#TODO: 交互式配置服务暂时无法正常运行
 # --------------------------------------------------------------------------
 
 
@@ -401,9 +407,9 @@ echo 'BUILD_CREATOR="jhuang6451"' >> "/etc/os-release"
 
 
 
-# ==========================================================================
-# --- 临时用户添加部分 ---
-# ==========================================================================
+# ===========================================================================================
+# --- temporary fix (because interactive post-install script won't work) 临时用户添加部分 ---
+# ===========================================================================================
 echo 'Adding temporary user "user" with sudo privileges...'
 
 # 1. 创建名为 'user' 的用户，并将其加入 'wheel' 组。
@@ -435,9 +441,10 @@ SUDOERS_FILE="/etc/sudoers.d/99-wheel-user"
 echo '%wheel ALL=(ALL) ALL' > "$SUDOERS_FILE"
 chmod 0440 "$SUDOERS_FILE"
 echo "Sudo access for group 'wheel' has been configured via $SUDOERS_FILE."
-# ==========================================================================
+# ===========================================================================================
 # --- 临时用户添加结束 ---
-# ==========================================================================
+#TODO: remove this temporary user after interactive post-install script is fixed
+# ===========================================================================================
 
 
 
